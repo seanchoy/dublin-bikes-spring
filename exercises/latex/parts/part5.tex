@@ -1,0 +1,168 @@
+\chapter{事务和定时任务：@Transactional、@Scheduled、Mockito}
+
+这一关把前面的部分串起来：每隔 5 分钟调用 JCDecaux（Part 3），把结果写进数据库（Part 4）。它替代的是原项目里 3 个 \code{while True: sleep(300)} 的 Python 爬虫脚本。
+
+\partinfo{%
+  \code{station/ingest/StationIngestService.java}：5.1\\
+  \code{station/ingest/StationScrapeJob.java}：5.2、5.3\\
+  \code{config/AppConfig.java}：5.3%
+}{\code{./mvnw test -Dtest='Part5*'}}
+
+\section{知识点}
+
+\subsection{事务（Transaction）}
+
+一次抓取要写 113 个站点和 113 条可用量记录。如果写到一半出错了，我们希望\textbf{要么全部写进去，要么全部不写}，不要留下一半新一半旧的数据。数据库的“事务”就是做这个的。
+
+在 Spring 里，给方法加上 \code{@Transactional}：
+
+\begin{java}
+@Service
+public class TransferService {
+
+    @Transactional
+    public void transfer(long from, long to, double amount) {
+        accounts.withdraw(from, amount);
+        accounts.deposit(to, amount);  // 这里抛 RuntimeException 的话，上面的取款也会被撤销
+    }
+}
+\end{java}
+
+\code{@Transactional} 的包名是 \code{org.springframework.transaction.annotation}。
+
+\begin{itemize}
+  \item 方法正常结束：提交（commit）。
+  \item 方法抛出 \code{RuntimeException}：回滚（rollback）。注意，受检异常（checked exception）默认\textbf{不会}回滚。
+  \item \code{@Transactional(readOnly = true)}：只读事务，Part 6 会用到。
+\end{itemize}
+
+\subsection{@Transactional 是怎么生效的：代理}
+
+Spring 不会修改你的类。它在创建 Bean 时，生成一个\textbf{代理对象}包在你的对象外面，别的 Bean 注入到的其实是这个代理：
+
+\begin{plaincode}
+调用方 --> 代理（开启事务）--> 你的对象.transfer(...) --> 代理（提交或回滚）
+\end{plaincode}
+
+\begin{note}[经典的坑：自调用]
+\textbf{同一个类里，一个方法调用另一个带 \code{@Transactional} 的方法，事务不会生效}，因为这是 \code{this.xxx()} 直接调用，没有经过代理。
+
+这也是为什么这一关把“定时触发”（\code{StationScrapeJob}）和“写数据库”（\code{StationIngestService}）拆成两个类：\code{StationScrapeJob} 调用的是 \code{StationIngestService} 的代理，事务能正常生效。面试很喜欢问这个。
+\end{note}
+
+\subsection{upsert 和幂等}
+
+\textbf{upsert}：有就更新，没有就插入。用 Part 4 的 Repository 可以这样写：
+
+\begin{java}
+BookEntity book = bookRepository.findById(isbn)
+        .orElseGet(() -> new BookEntity(isbn));   // 找不到就新建一个
+book.updateDetails(...);
+bookRepository.save(book);
+\end{java}
+
+\code{orElseGet} 和 \code{orElse} 的区别：\code{orElse(new X())} 不管有没有值都会先执行 \code{new X()}；\code{orElseGet(() -> new X())} 只在没有值的时候才执行。
+
+\textbf{幂等}：同一个操作执行一次和执行多次，结果一样。JCDecaux 的数据不是每 5 分钟都会变，如果某个站点的 \code{last_update} 和上次一样，说明没有新数据，不应该再插一条。插入之前用 \code{existsById} 检查一下就行。
+
+\subsection{定时任务：@Scheduled}
+
+\begin{java}
+@Component
+public class ReportJob {
+
+    @Scheduled(fixedDelayString = "${report.interval}")   // 从配置里读间隔
+    public void generate() { ... }
+}
+\end{java}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{l X}
+\toprule
+写法 & 含义 \\
+\midrule
+\code{fixedDelay} / \code{fixedDelayString} & 上一次\textbf{执行完}以后，再等这么久执行下一次 \\
+\code{fixedRate} / \code{fixedRateString} & 每隔这么久执行一次，不管上一次有没有执行完 \\
+\code{cron = "0 */5 * * * *"} & 按 cron 表达式执行 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\code{"${report.interval}"} 是占位符，Spring 会替换成配置里的值，\code{5m}、\code{30s} 这样的写法都可以。还要在某个 \code{@Configuration} 类上加 \code{@EnableScheduling}，定时任务才会真的运行。
+
+\subsection{日志}
+
+\begin{java}
+private static final Logger log = LoggerFactory.getLogger(ReportJob.class);
+
+log.info("Generated {} reports in {} ms", count, elapsed);  // {} 按顺序替换成后面的参数
+log.warn("Report failed: {}", e.getMessage());
+\end{java}
+
+用 \code{{}} 占位符，不要用字符串拼接：日志级别关闭时，占位符写法不会去拼字符串，性能更好。
+
+\subsection{Mockito：不启动 Spring 的单元测试}
+
+打开 \code{Part5ScrapeJobTest}。它没有启动 Spring，而是用 Mockito 造出假的依赖，再自己 \code{new} 出被测对象：
+
+\begin{java}
+JcDecauxClient client = mock(JcDecauxClient.class);    // 假对象，所有方法默认什么都不做
+when(client.fetchStations()).thenReturn(dtos);         // 规定：调用时返回 dtos
+when(client.fetchStations()).thenThrow(new JcDecauxException("..."));  // 或者：调用时抛异常
+
+new StationScrapeJob(client, ingestService, props).run();
+
+verify(ingestService).ingest(dtos);                    // 检查：ingest 被用 dtos 调用过一次
+verifyNoInteractions(client);                          // 检查：client 完全没被调用
+\end{java}
+
+能这样测试，前提是用了构造函数注入（Part 2）。这就是构造函数注入的一大好处。
+
+\section{题目}
+
+\begin{task}{5.1\quad StationIngestService：写数据库}
+\code{StationIngestService} 是一个 Service，\code{ingest} 方法整体在一个事务里。
+
+对每个 \code{JcDecauxStationDto}：
+\begin{enumerate}
+  \item \textbf{站点 upsert}：用 \code{number} 查 \code{station} 表，有就更新，没有就新建，然后保存。站点信息用 \code{updateDetails(...)} 设置（name、address、lat、lng、banking、bikeStands、status）。
+  \item \textbf{可用量幂等插入}：如果 \code{lastUpdateInstant()} 不为 null，而且主键 \code{(number, lastUpdate)} 在数据库里还不存在，就插入一条 \code{AvailabilityEntity}（availableBikes、availableBikeStands、status）。
+\end{enumerate}
+
+返回 \code{IngestResult(保存了几个站点, 新插入了几条可用量)}。
+
+\begin{example}
+\begin{plaincode}
+第一次 ingest 3 个站点（last_update 都是 T1）     ->  IngestResult(3, 3)
+同样的数据再 ingest 一次                         ->  IngestResult(3, 0)   // 幂等
+ingest 站点 42，名字改了，last_update 变成 T2    ->  IngestResult(1, 1)   // 名字被更新，多一条可用量
+ingest 一个 last_update 为 null 的站点           ->  IngestResult(1, 0)
+ingest 空列表                                   ->  IngestResult(0, 0)
+\end{plaincode}
+\end{example}
+\end{task}
+
+\begin{task}{5.2\quad StationScrapeJob：抓取流程}
+\code{StationScrapeJob} 交给 Spring 管理。\code{run()} 的逻辑：
+\begin{enumerate}
+  \item 配置里 \code{app.scraper.enabled} 是 false：直接返回，什么都不调用。
+  \item 否则：调用 \code{client.fetchStations()}，把结果交给 \code{ingestService.ingest(...)}，然后打一条 info 日志，写清楚保存了几个站点、插入了几条记录。
+  \item 如果抛了 \code{JcDecauxException}：捕获，打一条 warn 日志，\textbf{不要往外抛}。定时任务里的异常没人处理，只会让日志里多一段很长的错误堆栈。
+\end{enumerate}
+\end{task}
+
+\begin{task}{5.3\quad 开启定时执行}
+\begin{itemize}
+  \item 让 \code{run()} 每隔 \code{app.scraper.interval} 执行一次，从\textbf{上一次执行完}开始计时。用占位符读取配置，冒号后面给一个默认值 \code{5m}。
+  \item 在 \code{AppConfig} 上开启定时任务功能。
+\end{itemize}
+\end{task}
+
+\begin{think}
+\begin{enumerate}
+  \item 如果把 \code{@Transactional} 加在 \code{StationScrapeJob.run()} 上，再在 \code{run()} 里调用同一个类的另一个方法写数据库，事务会生效吗？为什么？
+  \item 应用部署了 2 个实例，两个实例的定时任务会同时抓取、同时写库，会出什么问题？怎么解决？（提示：ShedLock、数据库唯一约束）
+  \item \code{@Transactional} 方法里抛出受检异常（比如 \code{IOException}），事务会回滚吗？
+  \item \code{fixedDelay} 和 \code{fixedRate} 有什么区别？如果一次抓取花了 6 分钟，间隔是 5 分钟，两种写法分别会怎样？
+\end{enumerate}
+\end{think}

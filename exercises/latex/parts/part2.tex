@@ -1,0 +1,204 @@
+\chapter{Spring 核心：容器、Bean、依赖注入、配置}
+
+这一关学 Spring 最核心的概念。后面几关的每一个类，都是按这一关的方式交给 Spring 管理的。
+
+\partinfo{%
+  \code{config/AppProperties.java}：2.1、2.2\\
+  \code{config/AppConfig.java}：2.1、2.3\\
+  \code{station/domain/StationFinder.java}：2.4%
+}{\code{./mvnw test -Dtest='Part2*'}}
+
+\section{知识点}
+
+\subsection{Spring 容器和 Bean}
+
+在普通 Java 程序里，你自己 \code{new} 对象，自己把对象传给需要它的地方：
+
+\begin{java}
+BookRepository repo = new BookRepository(dataSource);
+BookService service = new BookService(repo);
+BookController controller = new BookController(service);
+\end{java}
+
+项目一大，这种“谁 new 谁、谁传给谁”的代码会非常多。Spring 的做法是：\textbf{你只声明有哪些类、每个类需要什么，Spring 负责创建对象并把它们连起来。}
+
+\begin{itemize}
+  \item 由 Spring 创建和管理的对象叫 \textbf{Bean}。
+  \item 管理所有 Bean 的东西叫\textbf{容器}（ApplicationContext）。
+  \item 默认每个 Bean 只创建一个实例（单例），所有用到它的地方共享同一个。
+\end{itemize}
+
+\subsection{怎么把一个类注册成 Bean}
+
+\textbf{方法一：在类上加注解，让 Spring 扫描到。}
+
+\begin{java}
+@Component
+public class PriceCalculator { ... }
+\end{java}
+
+启动类 \code{DublinBikesSpringApplication} 上的 \code{@SpringBootApplication} 会扫描它所在的包（\code{ie.dublinbikes}）以及所有子包，找到带这类注解的类，自动创建 Bean。
+
+\code{@Component} 是通用的。还有几个意思更具体的，效果一样，只是让代码更好读：
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+注解 & 用在 \\
+\midrule
+\code{@Component} & 通用组件 \\
+\code{@Service} & 业务逻辑层 \\
+\code{@Repository} & 数据访问层 \\
+\code{@RestController} & 提供 REST 接口的类（Part 6） \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{方法二：在配置类里写一个方法，返回值就是 Bean。}有些类不是你写的（比如 JDK 的 \code{Clock}），没办法在上面加注解，就用这种方式：
+
+\begin{java}
+@Configuration                 // 表示这是一个配置类
+public class MyConfig {
+
+    @Bean                      // 这个方法的返回值会注册成 Bean
+    public Random random() {
+        return new Random(42);
+    }
+}
+\end{java}
+
+\subsection{依赖注入（DI）：通过构造函数}
+
+一个 Bean 需要用到另一个 Bean 时，\textbf{在构造函数参数里声明就行}，Spring 创建它的时候会自动把需要的 Bean 传进来：
+
+\begin{java}
+@Service
+public class BookService {
+
+    private final BookRepository repository;
+
+    public BookService(BookRepository repository) {   // Spring 自动传入 BookRepository 的 Bean
+        this.repository = repository;
+    }
+}
+\end{java}
+
+只有一个构造函数时，不需要加任何注解。这种写法叫\textbf{构造函数注入}，是官方推荐的方式。你会在网上看到另一种写法 \code{@Autowired private BookRepository repository;}（字段注入），不推荐，原因见本章最后的“想一想”。
+
+\subsection{配置文件绑定到 record}
+
+\code{src/main/resources/application.yml} 是应用的配置文件。打开看一下，里面有这样一段：
+
+\begin{yamlcode}
+app:
+  jcdecaux:
+    api-key: ${JCDECAUX_API_KEY:}
+  scraper:
+    enabled: ${SCRAPER_ENABLED:false}
+    interval: 5m
+\end{yamlcode}
+
+\code{${JCDECAUX_API_KEY:}} 的意思是：读取环境变量 \code{JCDECAUX_API_KEY}，没有的话用冒号后面的默认值（这里是空字符串）。
+
+在代码里读这些配置，最好的方式是把它们\textbf{绑定到一个 record}：
+
+\begin{java}
+@ConfigurationProperties(prefix = "library")
+public record LibraryProperties(String name, int maxLoans, Duration loanPeriod) {}
+\end{java}
+
+\begin{yamlcode}
+library:
+  name: Central
+  max-loans: 5          # 配置里用 kebab-case，自动对应 Java 的 maxLoans
+  loan-period: 14d      # 字符串自动转成 Duration（支持 30s、5m、2h、14d）
+\end{yamlcode}
+
+嵌套的配置对应嵌套的 record：\code{app.jcdecaux.api-key} 对应 \code{AppProperties} 里 \code{Jcdecaux} record 的 \code{apiKey}。
+
+光写 \code{@ConfigurationProperties} 还不够，还要告诉 Spring “请把这个 record 注册成 Bean”。在某个 \code{@Configuration} 类上加：
+
+\begin{java}
+@EnableConfigurationProperties(LibraryProperties.class)
+\end{java}
+
+之后任何 Bean 都可以在构造函数里要一个 \code{LibraryProperties}。
+
+\textbf{默认值}：配置里没写的字段会是 null（基本类型是 0 或 false）。要给默认值，在 record 参数上加 \code{@DefaultValue}（包名 \code{org.springframework.boot.context.properties.bind}）：
+
+\begin{java}
+public record LibraryProperties(
+        @DefaultValue("Central") String name,
+        @DefaultValue("5") int maxLoans) {}
+\end{java}
+
+嵌套 record 有个坑：如果配置文件里完全没有 \code{library.xxx} 这一段，嵌套的 record 本身会是 null。在\textbf{外层}的参数上加一个不带值的 \code{@DefaultValue}，就能让 Spring 用默认值创建它：
+
+\begin{java}
+public record Outer(@DefaultValue Inner inner) {}
+\end{java}
+
+\subsection{测试是怎么验证的}
+
+打开 \code{src/test/java/ie/dublinbikes/config/Part2SpringCoreTest.java} 看一下。\code{ApplicationContextRunner} 会启动一个只包含 \code{AppConfig} 的小容器，用 \code{withPropertyValues(...)} 模拟配置文件，然后检查容器里有没有你期望的 Bean、值对不对。
+
+\section{题目}
+
+\begin{task}{2.1\quad 配置绑定}
+让 \code{application.yml} 里 \code{app.*} 的配置能绑定到 \code{AppProperties}：
+\begin{itemize}
+  \item \code{AppProperties} 对应前缀 \code{app}。
+  \item \code{AppConfig} 是一个配置类，并且启用 \code{AppProperties} 的绑定。
+\end{itemize}
+
+\begin{example}
+\begin{plaincode}
+配置：app.jcdecaux.api-key=test-key
+      app.jcdecaux.contract=lyon
+      app.scraper.interval=30s
+
+结果：props.jcdecaux().apiKey()   == "test-key"
+      props.jcdecaux().contract() == "lyon"
+      props.scraper().interval()  == Duration.ofSeconds(30)
+\end{plaincode}
+\end{example}
+\end{task}
+
+\begin{task}{2.2\quad 默认值}
+什么都没配置时：
+
+\medskip
+\begin{tabular}{ll}
+\toprule
+字段 & 默认值 \\
+\midrule
+\code{jcdecaux().apiKey()} & \code{null}（不需要默认值） \\
+\code{jcdecaux().contract()} & \code{"dublin"} \\
+\code{jcdecaux().baseUrl()} & \code{"https://api.jcdecaux.com/vls/v1"} \\
+\code{scraper().enabled()} & \code{false} \\
+\code{scraper().interval()} & 5 分钟 \\
+\bottomrule
+\end{tabular}
+
+\medskip
+而且 \code{jcdecaux()} 和 \code{scraper()} 本身不能是 null。
+\end{task}
+
+\begin{task}{2.3\quad Clock Bean}
+在 \code{AppConfig} 里把 \code{clock()} 方法的返回值注册成 Bean，返回一个使用 \code{Europe/Dublin} 时区的系统时钟（看一下 \code{Clock.system(...)} 和 \code{ZoneId.of(...)}）。
+
+为什么要把时钟做成 Bean，而不是在代码里直接用 \code{Instant.now()}？见本章最后的“想一想”。
+\end{task}
+
+\begin{task}{2.4\quad 组件扫描}
+让 Spring 能通过组件扫描自动发现 \code{StationFinder}。Part 6 的 \code{StationQueryService} 会在构造函数里要一个 \code{StationFinder}。
+\end{task}
+
+\begin{think}
+\begin{enumerate}
+  \item 为什么推荐构造函数注入，不推荐 \code{@Autowired} 字段注入？（提示：\code{final} 字段、不启动 Spring 能不能写单元测试、循环依赖）
+  \item Bean 默认是单例。如果一个单例 Bean 里有一个会被修改的字段，多个请求同时访问会出什么问题？
+  \item 代码里直接调用 \code{Instant.now()}，和注入一个 \code{Clock} 再调用 \code{Instant.now(clock)}，测试的时候有什么区别？
+  \item \code{@Component} 和 \code{@Bean} 分别适合什么场景？
+\end{enumerate}
+\end{think}

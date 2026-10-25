@@ -1,0 +1,44 @@
+[
+  {
+    "number": 42,
+    "contract_name": "dublin",
+    "name": "SMITHFIELD NORTH",
+    "address": "Smithfield North",
+    "position": { "lat": 53.349562, "lng": -6.278198 },
+    "banking": false,
+    "bonus": false,
+    "bike_stands": 30,
+    "available_bike_stands": 27,
+    "available_bikes": 3,
+    "status": "OPEN",
+    "last_update": 1761400800000
+  },
+  {
+    "number": 2,
+    "contract_name": "dublin",
+    "name": "BLESSINGTON STREET",
+    "address": "Blessington Street",
+    "position": { "lat": 53.356769, "lng": -6.26814 },
+    "banking": true,
+    "bonus": false,
+    "bike_stands": 20,
+    "available_bike_stands": 13,
+    "available_bikes": 7,
+    "status": "CLOSED",
+    "last_update": 1761400740000
+  },
+  {
+    "number": 33,
+    "contract_name": "dublin",
+    "name": "PRINCES STREET / O'CONNELL STREET",
+    "address": "Princes Street",
+    "position": { "lat": 53.349013, "lng": -6.260311 },
+    "banking": true,
+    "bonus": false,
+    "bike_stands": 20,
+    "available_bike_stands": 20,
+    "available_bikes": 0,
+    "status": "OPEN",
+    "last_update": null
+  }
+]

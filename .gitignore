@@ -17,3 +17,6 @@ target/
 
 # OS
 .DS_Store
+
+# LaTeX build output
+exercises/latex/build/

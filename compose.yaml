@@ -1,0 +1,17 @@
+# 本地 MySQL（可选）。默认配置用内存 H2，不需要这个文件。
+# 启动：docker compose up -d   然后用 mysql profile 运行应用（见 exercises/README.md）
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: dublin_bikes
+      MYSQL_USER: bikes
+      MYSQL_PASSWORD: bikes
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+volumes:
+  mysql-data:

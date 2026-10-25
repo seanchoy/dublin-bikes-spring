@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: dublin-bikes-spring
+  config:
+    # 从仓库根目录的 .env 读取密钥（例如 JCDECAUX_API_KEY=...）；.env 不会被提交，文件不存在也不会报错
+    import: optional:file:.env[.properties]
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 表结构由 Flyway 负责；Hibernate 只检查实体和表是否对得上，对不上就启动失败
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+app:
+  jcdecaux:
+    api-key: ${JCDECAUX_API_KEY:}
+  scraper:
+    enabled: ${SCRAPER_ENABLED:false}
+    interval: 5m

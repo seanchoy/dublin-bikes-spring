@@ -1,0 +1,225 @@
+\chapter{现代 Java：record、Stream、Optional}
+
+这一关不涉及 Spring，目的是补上 Java 课上一般不讲、但 Spring 项目里到处都在用的写法。做完这一关，你会写出原 Python 项目里“找最近站点”功能的 Java 版本。
+
+\partinfo{%
+  \code{station/domain/Station.java}：1.1\\
+  \code{station/domain/GeoUtils.java}：1.2\\
+  \code{station/domain/StationFinder.java}：1.3、1.4、1.5\\
+  {\small（路径都相对于 \code{src/main/java/ie/dublinbikes/}）}%
+}{\code{./mvnw test -Dtest='Part1*'}}
+
+\section{知识点}
+
+\subsection{record：只用来装数据的类}
+
+以前写一个装数据的类，要写字段、构造函数、getter、\code{equals}、\code{hashCode}、\code{toString}，很长。record 一行就够了：
+
+\begin{java}
+public record Book(String title, String author, double price) {}
+\end{java}
+
+编译器自动生成：
+
+\begin{itemize}
+  \item 一个包含全部字段的构造函数：\code{new Book("Dune", "Herbert", 9.99)}
+  \item 访问方法，\textbf{名字和字段一样，没有 get 前缀}：\code{book.title()}、\code{book.price()}
+  \item \code{equals}、\code{hashCode}、\code{toString}：所有字段都相同的两个 record 用 \code{equals} 比较是相等的
+\end{itemize}
+
+record 的字段都是 \code{final} 的，创建以后不能修改。
+
+\textbf{紧凑构造函数（compact constructor）}：想在创建时做校验，可以写一个不带参数列表的构造函数。参数会自动赋值给字段，你只需要写校验逻辑：
+
+\begin{java}
+public record Range(int min, int max) {
+    public Range {
+        if (min > max) {
+            throw new IllegalArgumentException("min must be <= max");
+        }
+    }
+}
+\end{java}
+
+检查参数不能为 null，常用 \code{Objects.requireNonNull(value, "错误信息")}，它会在 value 为 null 时抛 \code{NullPointerException}。
+
+record 里也可以写普通方法：
+
+\begin{java}
+public record Book(String title, String author, double price) {
+    public boolean isCheap() {
+        return price < 10;
+    }
+}
+\end{java}
+
+\subsection{字符串比较要防 null}
+
+\begin{java}
+status.equals("OPEN")   // status 是 null 时抛 NullPointerException
+"OPEN".equals(status)   // status 是 null 时返回 false，推荐这种写法
+\end{java}
+
+\subsection{Python 数学函数对照}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Python & Java \\
+\midrule
+\code{math.radians(x)} & \code{Math.toRadians(x)} \\
+\code{math.sin(x)}、\code{math.cos(x)} & \code{Math.sin(x)}、\code{Math.cos(x)} \\
+\code{x ** 2} & \code{Math.pow(x, 2)} 或 \code{x * x} \\
+\code{math.sqrt(x)} & \code{Math.sqrt(x)} \\
+\code{math.atan2(y, x)} & \code{Math.atan2(y, x)} \\
+\code{round(x)} & \code{Math.round(x)}，返回 \code{long} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Stream：用流水线处理集合}
+
+Python 里会用列表推导式和 \code{sorted}，Java 里用 Stream。比如“找出 Herbert 写的书，按价格从低到高，取前 2 本的书名”：
+
+\begin{java}
+List<String> titles = books.stream()                       // 1. 把 List 变成 Stream
+        .filter(b -> b.author().equals("Herbert"))         // 2. 过滤：只留下满足条件的
+        .sorted(Comparator.comparingDouble(Book::price))   // 3. 排序：按 price 从小到大
+        .limit(2)                                          // 4. 只取前 2 个
+        .map(Book::title)                                  // 5. 转换：Book -> String
+        .toList();                                         // 6. 收集成 List
+\end{java}
+
+几个要点：
+
+\begin{itemize}
+  \item \code{b -> b.author().equals("Herbert")} 是 \textbf{lambda}，相当于 Python 的 \code{lambda b: b.author == "Herbert"}。
+  \item \code{Book::price} 是\textbf{方法引用}，是 \code{b -> b.price()} 的简写。
+  \item \code{Comparator.comparingDouble(...)} 按 double 排序；按 long 排序用 \code{Comparator.comparingLong(...)}，按 int 用 \code{comparingInt}。
+  \item \code{map} 可以把每个元素转成另一种类型，比如把 \code{Book} 转成一个新的 record。
+  \item \code{.toList()} 返回的 List 不能修改。Stream 不会改动原来的 List。
+  \item \code{sorted} 是\textbf{稳定排序}：排序依据相同的两个元素，保持原来的先后顺序。
+\end{itemize}
+
+\subsection{Optional：明确表示“可能没有”}
+
+如果一个方法可能找不到结果，返回 \code{null} 很容易让调用方忘记判断，然后在别处抛 \code{NullPointerException}。返回 \code{Optional} 等于在类型上明确写着“可能为空”：
+
+\begin{java}
+Optional<Book> cheapest = books.stream()
+        .filter(Book::isCheap)
+        .findFirst();              // findFirst() 返回的就是 Optional
+
+cheapest.isPresent();              // 有没有值
+cheapest.orElse(null);             // 有值返回值，没值返回 null
+cheapest.orElseThrow();            // 有值返回值，没值抛异常
+\end{java}
+
+\section{题目}
+
+\begin{task}{1.1\quad Station record}
+\code{Station} 的字段已经定义好了。你要补两样东西：
+
+\textbf{a) 紧凑构造函数}，校验：
+\begin{itemize}
+  \item \code{name} 不能是 null，否则抛 \code{NullPointerException}
+  \item \code{availableBikes}、\code{availableStands}、\code{totalStands} 都不能小于 0，否则抛 \code{IllegalArgumentException}
+\end{itemize}
+
+\textbf{b) \code{isOpen()}}：\code{status} 等于 \code{"OPEN"} 时返回 true。\code{status} 可能是 null，这时返回 false。
+\end{task}
+
+\begin{task}{1.2\quad haversine 距离}
+把原项目 \code{main_project/journey/services.py} 里的 \code{haversine} 改写成 Java，实现 \code{GeoUtils.haversineMeters}，返回两个经纬度之间的距离（米）。地球半径用类里已经定义好的 \code{EARTH_RADIUS_METERS}。
+
+\begin{python}
+def haversine(lat1, lng1, lat2, lng2) -> float:
+    R = 6371000
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lng2 - lng1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+\end{python}
+
+\begin{example}
+\begin{plaincode}
+haversineMeters(53.3498, -6.2603, 53.349013, -6.260311)  ->  87.513...
+haversineMeters(53.3498, -6.2603, 51.5074, -0.1278)      ->  463311.06...（都柏林到伦敦）
+\end{plaincode}
+\end{example}
+\end{task}
+
+\begin{task}{1.3\quad findNearest：基本版}
+实现 \code{StationFinder.findNearest(lat, lng, stations, requireBikes, requireStands, limit)}。这一题先\textbf{忽略} \code{requireBikes} 和 \code{requireStands} 两个参数。
+
+\begin{enumerate}
+  \item 对每个站点，计算它到 \code{(lat, lng)} 的距离，用 \code{Math.round} 四舍五入成整数米。
+  \item 包装成 \code{NearbyStation(station, distanceMeters)}（这个 record 已经写好了）。
+  \item 按距离从近到远排序；距离相同时保持原来的顺序。
+  \item 只返回前 \code{limit} 个。
+\end{enumerate}
+
+\textbf{要求用 Stream 写，不要用 for 循环。}
+
+\textbf{Constraints}
+\begin{itemize}
+  \item \code{limit < 0} 时抛 \code{IllegalArgumentException}。
+  \item \code{limit} 大于站点数时返回全部站点；\code{limit == 0} 时返回空列表。
+  \item 不能修改传进来的 \code{stations}。
+\end{itemize}
+
+\begin{example}[Example Input]
+查询点是 O'Connell Street 的 Spire：\code{lat = 53.3498, lng = -6.2603}，\code{limit = 3}。
+
+\medskip
+{\small
+\begin{tabular}{rllllrr}
+\toprule
+number & name & lat & lng & status & bikes & stands \\
+\midrule
+42 & SMITHFIELD NORTH & 53.349562 & -6.278198 & OPEN & 3 & 27 \\
+5 & CHARLEMONT PLACE & 53.330662 & -6.260177 & OPEN & 10 & 30 \\
+33 & PRINCES STREET & 53.349013 & -6.260311 & OPEN & 0 & 20 \\
+2 & BLESSINGTON STREET & 53.356769 & -6.26814 & CLOSED & 7 & 13 \\
+10 & DAME STREET & 53.344007 & -6.266802 & OPEN & 5 & 0 \\
+\bottomrule
+\end{tabular}}
+\end{example}
+
+\begin{example}[Example Output]
+\begin{plaincode}
+[NearbyStation(33, 88), NearbyStation(10, 775), NearbyStation(2, 933)]
+\end{plaincode}
+全部 5 个站点的距离：33 → 88 米，10 → 775 米，2 → 933 米，42 → 1188 米，5 → 2128 米。
+\end{example}
+\end{task}
+
+\begin{task}{1.4\quad findNearest：过滤条件}
+在 1.3 的基础上加上两个过滤条件：
+\begin{itemize}
+  \item \code{requireBikes == true}：排除 \code{availableBikes == 0} 的站点（用户要借车）。
+  \item \code{requireStands == true}：排除 \code{availableStands == 0} 的站点（用户要还车）。
+  \item \textbf{新需求}：只要打开了任意一个过滤条件，就同时排除没有开放（\code{!isOpen()}）的站点，因为关闭的站点既不能借也不能还。两个条件都没打开时，关闭的站点照常返回。
+\end{itemize}
+
+\begin{example}[Example（同样的 5 个站点，limit = 10）]
+\begin{plaincode}
+requireBikes=true,  requireStands=false  ->  [10, 42, 5]
+requireBikes=false, requireStands=true   ->  [33, 42, 5]
+requireBikes=true,  requireStands=true   ->  [42, 5]
+\end{plaincode}
+\end{example}
+\end{task}
+
+\begin{task}{1.5\quad findByNumber}
+在列表里找编号为 \code{number} 的站点，找到返回 \code{Optional.of(站点)}，找不到返回 \code{Optional.empty()}。\textbf{不要返回 null。}
+\end{task}
+
+\begin{think}
+\begin{enumerate}
+  \item record 为什么设计成不可修改的？在多线程环境下有什么好处？
+  \item 什么时候用 Stream，什么时候用普通 for 循环更合适？
+  \item 方法返回 \code{Optional} 和返回 \code{null} 相比，好处是什么？为什么不建议把 \code{Optional} 用作类的字段或方法参数？
+\end{enumerate}
+\end{think}
