@@ -1,6 +1,13 @@
 package ie.dublinbikes.config;
 
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
 import java.time.Clock;
+import java.time.ZoneId;
+
 
 /**
  * 应用级别的配置类。
@@ -10,11 +17,16 @@ import java.time.Clock;
  */
 // TODO 2.1: 把这个类标记成配置类，并启用 AppProperties 的配置绑定
 // TODO 5.3: 开启定时任务功能
+@Configuration
+@EnableConfigurationProperties(AppProperties.class)
+@EnableScheduling
 public class AppConfig {
 
     // TODO 2.3: 把这个方法的返回值注册成一个 Bean
+    @Bean
     public Clock clock() {
         // TODO 2.3: 返回一个使用 Europe/Dublin 时区的系统时钟
-        throw new UnsupportedOperationException("TODO 2.3");
+        return Clock.system(ZoneId.of("Europe/Dublin"));
     }
+
 }
