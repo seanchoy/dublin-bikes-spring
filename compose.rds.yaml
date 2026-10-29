@@ -1,0 +1,16 @@
+# Run the app against AWS RDS instead of the local MySQL container:
+#   docker compose -f compose.yaml -f compose.rds.yaml up --build app ml-service
+# The RDS_* settings are read from .env (see .env.example). Use a database of its own on the
+# RDS instance (not the Flask project's databases): Flyway creates the tables on first start.
+services:
+  app:
+    environment:
+      MYSQL_HOST: ${RDS_HOST:?set RDS_HOST in .env}
+      MYSQL_PORT: ${RDS_PORT:-3306}
+      MYSQL_DATABASE: ${RDS_DATABASE:-dublin_bikes_spring}
+      MYSQL_USER: ${RDS_USER:?set RDS_USER in .env}
+      MYSQL_PASSWORD: ${RDS_PASSWORD:?set RDS_PASSWORD in .env}
+    # Do not wait for (or start) the local mysql container
+    depends_on: !override
+      ml-service:
+        condition: service_healthy
