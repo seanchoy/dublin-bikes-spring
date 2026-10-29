@@ -15,8 +15,8 @@ import org.springframework.context.annotation.Configuration;
 import ie.dublinbikes.station.domain.StationFinder;
 
 /**
- * Part 2：Spring 容器、Bean、配置绑定。
- * ApplicationContextRunner 会启动一个只包含指定配置类的小型 Spring 容器，比启动整个应用快得多。
+ * Part 2: the Spring container, Beans and configuration binding.
+ * ApplicationContextRunner starts a small Spring container with only the given configuration classes, much faster than starting the whole application.
  */
 class Part2SpringCoreTest {
 
@@ -24,7 +24,7 @@ class Part2SpringCoreTest {
             .withUserConfiguration(AppConfig.class);
 
     @Test
-    @DisplayName("2.1 app.jcdecaux.* 配置绑定到 AppProperties")
+    @DisplayName("2.1 app.jcdecaux.* binds to AppProperties")
     void bindsJcdecauxProperties() {
         runner.withPropertyValues(
                         "app.jcdecaux.api-key=test-key",
@@ -41,7 +41,7 @@ class Part2SpringCoreTest {
     }
 
     @Test
-    @DisplayName("2.1 app.scraper.* 配置绑定，字符串 30s 自动转成 Duration")
+    @DisplayName("2.1 app.scraper.* binds, and the string 30s becomes a Duration")
     void bindsScraperProperties() {
         runner.withPropertyValues("app.scraper.enabled=true", "app.scraper.interval=30s")
                 .run(context -> {
@@ -53,7 +53,7 @@ class Part2SpringCoreTest {
     }
 
     @Test
-    @DisplayName("2.2 什么都不配置时使用默认值，而且嵌套对象不是 null")
+    @DisplayName("2.2 Defaults are used when nothing is configured, and nested objects are not null")
     void usesDefaults() {
         runner.run(context -> {
             assertThat(context).hasNotFailed();
@@ -69,7 +69,7 @@ class Part2SpringCoreTest {
     }
 
     @Test
-    @DisplayName("2.3 容器里有一个 Clock Bean，时区是 Europe/Dublin")
+    @DisplayName("2.3 The container has a Clock Bean in the Europe/Dublin time zone")
     void clockBean() {
         runner.run(context -> {
             assertThat(context).hasNotFailed();
@@ -79,7 +79,7 @@ class Part2SpringCoreTest {
     }
 
     @Test
-    @DisplayName("2.4 组件扫描能找到 StationFinder")
+    @DisplayName("2.4 Component scanning finds StationFinder")
     void stationFinderIsComponent() {
         new ApplicationContextRunner()
                 .withUserConfiguration(ScanDomainPackage.class)

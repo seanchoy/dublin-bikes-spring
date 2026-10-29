@@ -3,9 +3,9 @@ package ie.dublinbikes.station.domain;
 import java.util.Objects;
 
 /**
- * 一个站点在某一时刻的状态。这是整个项目的核心领域对象，不依赖 Spring、数据库或 JSON。
+ * The state of one station at one moment. This is the core domain object of the project and does not depend on Spring, the database or JSON.
  *
- * Part 1.1：见练习册 Part 1
+ * Part 1.1: see workbook Part 1
  */
 public record Station(
         int number,
@@ -18,9 +18,9 @@ public record Station(
         int availableStands,
         int totalStands) {
 
-    // TODO 1.1a: 写一个 compact constructor（紧凑构造函数），校验：
-    //   - name 不能是 null（抛 NullPointerException）
-    //   - availableBikes、availableStands、totalStands 都不能小于 0（抛 IllegalArgumentException）
+    // TODO 1.1a: write a compact constructor that checks:
+    //   - name is not null (throw NullPointerException)
+    //   - availableBikes, availableStands and totalStands are not negative (throw IllegalArgumentException)
     public Station {
         Objects.requireNonNull(name, "name can not be null");
         if(availableBikes < 0 || availableStands < 0 || totalStands <0){
@@ -30,7 +30,7 @@ public record Station(
     }
 
     public boolean isOpen() {
-        // TODO 1.1b: status 等于 "OPEN" 时返回 true；status 可能是 null
+        // TODO 1.1b: return true when status equals "OPEN"; status may be null
         return "OPEN".equals(status);
     }
 }

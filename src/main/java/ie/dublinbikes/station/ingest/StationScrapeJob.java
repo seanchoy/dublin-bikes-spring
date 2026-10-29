@@ -12,8 +12,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/** Part 5.2 / 5.3：见练习册 Part 5 */
-// TODO 5.2: 让 Spring 管理这个类
+/** Part 5.2 / 5.3: see workbook Part 5 */
+// TODO 5.2: let Spring manage this class
 @Component
 public class StationScrapeJob {
 
@@ -29,11 +29,11 @@ public class StationScrapeJob {
         this.properties = properties;
     }
 
-    // TODO 5.3: 让这个方法每隔 app.scraper.interval 执行一次（上一次执行完之后再开始计时）
+    // TODO 5.3: run this method every app.scraper.interval (counting from when the previous run finished)
     @Scheduled(fixedDelayString = "${app.scraper.interval:5m}")
     public void run() {
-        // TODO 5.2: 开关关闭就直接返回；否则抓取 → 写库 → 打 info 日志；
-        //           JcDecauxException 要捕获并打 warn 日志，不能往外抛
+        // TODO 5.2: return straight away if the switch is off; otherwise fetch → save → log at info;
+        //           catch JcDecauxException and log a warning instead of rethrowing
         if(!properties.scraper().enabled()){
             return;
         }

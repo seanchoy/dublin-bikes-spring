@@ -9,8 +9,8 @@ import ie.dublinbikes.station.persistence.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Part 5.1：见练习册 Part 5 */
-// TODO 5.1: 标记成 Service
+/** Part 5.1: see workbook Part 5 */
+// TODO 5.1: mark as a Service
 @Service
 public class StationIngestService {
 
@@ -23,11 +23,11 @@ public class StationIngestService {
         this.availabilityRepository = availabilityRepository;
     }
 
-    // TODO 5.1: 整个方法放在一个数据库事务里
+    // TODO 5.1: run the whole method in one database transaction
     @Transactional
     public IngestResult ingest(List<JcDecauxStationDto> dtos) {
-        // TODO 5.1: 对每个 dto：
-        //   1. 站点 upsert：数据库里有就更新，没有就新建（StationEntity 的构造函数和 updateDetails）
+        // TODO 5.1: for each dto:
+        //   1. upsert the station: update it if it exists, otherwise create it (StationEntity constructor and updateDetails)
         int stationsSaved = 0;
         int availabilityInserted = 0;
         for(JcDecauxStationDto dto: dtos){
@@ -43,8 +43,8 @@ public class StationIngestService {
             stationRepository.save(station);
             stationsSaved++;
 
-            //   2. last_update 不为 null 且 (number, last_update) 在数据库里还不存在时，插入一条 AvailabilityEntity
-            //   返回 IngestResult(保存了几个站点, 新插入了几条可用量)
+            //   2. if last_update is not null and (number, last_update) is not in the database yet, insert an AvailabilityEntity
+            //   return IngestResult(stations saved, availability rows inserted)
 
             Instant lastUpdate = dto.lastUpdateInstant();
             if(lastUpdate == null){

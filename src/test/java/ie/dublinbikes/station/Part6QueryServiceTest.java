@@ -23,7 +23,7 @@ import ie.dublinbikes.station.persistence.StationEntity;
 import ie.dublinbikes.station.persistence.StationRepository;
 import jakarta.persistence.EntityManager;
 
-/** Part 6.1：Service 层把站点信息和最新可用量合并成领域对象 Station。 */
+/** Part 6.1: the Service layer combines station info and the latest availability into the Station domain object. */
 @DataJpaTest
 @Import({StationQueryService.class, StationFinder.class})
 class Part6QueryServiceTest {
@@ -64,7 +64,7 @@ class Part6QueryServiceTest {
     }
 
     @Test
-    @DisplayName("listStations：按站点编号排序，用最新的可用量；没有可用量记录的站点车和空位都是 0")
+    @DisplayName("listStations: ordered by station number, using the latest availability; stations with no availability record have 0 bikes and stands")
     void listStations() {
         List<Station> stations = queryService.listStations();
 
@@ -77,13 +77,13 @@ class Part6QueryServiceTest {
     }
 
     @Test
-    @DisplayName("getStation：返回单个站点")
+    @DisplayName("getStation: returns a single station")
     void getStation() {
         assertThat(queryService.getStation(42).availableBikes()).isEqualTo(3);
     }
 
     @Test
-    @DisplayName("getStation：站点不存在时抛 StationNotFoundException")
+    @DisplayName("getStation: throws StationNotFoundException when the station does not exist")
     void getStationNotFound() {
         assertThatThrownBy(() -> queryService.getStation(999))
                 .isInstanceOf(StationNotFoundException.class)
@@ -91,7 +91,7 @@ class Part6QueryServiceTest {
     }
 
     @Test
-    @DisplayName("findNearest：复用 Part 1 的 StationFinder，requireBikes 时排除没车的站点")
+    @DisplayName("findNearest: reuses the Part 1 StationFinder; with requireBikes, stations without bikes are excluded")
     void findNearest() {
         List<NearbyStation> all = queryService.findNearest(53.3498, -6.2603, 2, false);
         assertThat(all).extracting(n -> n.station().number()).containsExactly(33, 42);

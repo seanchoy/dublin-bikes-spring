@@ -25,9 +25,9 @@ import ie.dublinbikes.jcdecaux.JcDecauxException;
 import ie.dublinbikes.jcdecaux.JcDecauxStationDto;
 
 /**
- * Part 5.2 / 5.3：定时任务。
- * 这是一个普通的单元测试，不启动 Spring：依赖全部用 Mockito 造的假对象，自己 new 出被测对象。
- * 能这样测，正是因为我们用了构造函数注入。
+ * Part 5.2 / 5.3: the scheduled job.
+ * A plain unit test without Spring: every dependency is a Mockito fake and the object under test is created with new.
+ * This works precisely because we use constructor injection.
  */
 class Part5ScrapeJobTest {
 
@@ -41,7 +41,7 @@ class Part5ScrapeJobTest {
     }
 
     @Test
-    @DisplayName("5.2 开关关闭时，完全不调用 JCDecaux")
+    @DisplayName("5.2 When the switch is off, JCDecaux is not called at all")
     void disabledDoesNothing() {
         new StationScrapeJob(client, ingestService, props(false)).run();
 
@@ -49,7 +49,7 @@ class Part5ScrapeJobTest {
     }
 
     @Test
-    @DisplayName("5.2 开关打开时，抓取数据并交给 StationIngestService 写库")
+    @DisplayName("5.2 When the switch is on, it fetches data and passes it to StationIngestService")
     void enabledFetchesAndIngests() {
         List<JcDecauxStationDto> dtos = List.of(new JcDecauxStationDto(42, "dublin", "SMITHFIELD NORTH", "Smithfield",
                 new JcDecauxStationDto.Position(53.35, -6.27), false, false, 30, 27, 3, "OPEN", 1761400800000L));
@@ -62,7 +62,7 @@ class Part5ScrapeJobTest {
     }
 
     @Test
-    @DisplayName("5.2 JCDecaux 出错时只记日志，不往外抛异常，也不写库")
+    @DisplayName("5.2 When JCDecaux fails it only logs, without throwing or writing to the database")
     void failureIsSwallowed() {
         when(client.fetchStations()).thenThrow(new JcDecauxException("JCDecaux returned HTTP 503"));
 
@@ -73,19 +73,19 @@ class Part5ScrapeJobTest {
     }
 
     @Test
-    @DisplayName("5.3 run() 标了 @Scheduled，间隔读取 app.scraper.interval")
+    @DisplayName("5.3 run() is annotated with @Scheduled and reads its interval from app.scraper.interval")
     void runIsScheduled() throws NoSuchMethodException {
         Scheduled scheduled = StationScrapeJob.class.getMethod("run").getAnnotation(Scheduled.class);
 
-        assertThat(scheduled).as("run() 上应该有 @Scheduled").isNotNull();
+        assertThat(scheduled).as("run() should be annotated with @Scheduled").isNotNull();
         assertThat(scheduled.fixedDelayString()).contains("app.scraper.interval");
     }
 
     @Test
-    @DisplayName("5.3 AppConfig 开启了定时任务功能")
+    @DisplayName("5.3 AppConfig enables scheduled tasks")
     void schedulingEnabled() {
         assertThat(AppConfig.class.isAnnotationPresent(EnableScheduling.class))
-                .as("AppConfig 上应该有 @EnableScheduling")
+                .as("AppConfig should be annotated with @EnableScheduling")
                 .isTrue();
     }
 }

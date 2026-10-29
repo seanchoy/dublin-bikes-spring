@@ -17,7 +17,7 @@ import ie.dublinbikes.station.persistence.AvailabilityRepository;
 import ie.dublinbikes.station.persistence.StationRepository;
 import jakarta.persistence.EntityManager;
 
-/** Part 5.1：把抓到的数据写进数据库（站点 upsert，可用量幂等插入）。 */
+/** Part 5.1: writing scraped data to the database (stations upserted, availability inserted idempotently). */
 @DataJpaTest
 @Import(StationIngestService.class)
 class Part5IngestServiceTest {
@@ -53,7 +53,7 @@ class Part5IngestServiceTest {
     }
 
     @Test
-    @DisplayName("Example：第一次抓取，3 个站点、3 条可用量记录全部写入")
+    @DisplayName("Example: first scrape writes all 3 stations and 3 availability rows")
     void firstIngest() {
         IngestResult result = ingestService.ingest(FIRST_SCRAPE);
         flushAndClear();
@@ -67,7 +67,7 @@ class Part5IngestServiceTest {
     }
 
     @Test
-    @DisplayName("幂等：同样的数据再写一次，不会重复插入可用量记录")
+    @DisplayName("Idempotent: writing the same data again does not insert duplicate availability rows")
     void idempotent() {
         ingestService.ingest(FIRST_SCRAPE);
         flushAndClear();
@@ -81,7 +81,7 @@ class Part5IngestServiceTest {
     }
 
     @Test
-    @DisplayName("upsert：站点信息变化时更新原来那一行；last_update 变了就新插一条可用量")
+    @DisplayName("upsert: changed station info updates the existing row; a new last_update inserts a new availability row")
     void updatesStationAndAddsAvailability() {
         ingestService.ingest(FIRST_SCRAPE);
         flushAndClear();
@@ -97,7 +97,7 @@ class Part5IngestServiceTest {
     }
 
     @Test
-    @DisplayName("last_update 为 null 时只保存站点，不插入可用量")
+    @DisplayName("When last_update is null, only the station is saved, no availability row")
     void nullLastUpdate() {
         IngestResult result = ingestService.ingest(List.of(dto(33, "PRINCES STREET", 0, 20, "OPEN", null)));
         flushAndClear();
@@ -108,7 +108,7 @@ class Part5IngestServiceTest {
     }
 
     @Test
-    @DisplayName("空列表：什么都不写")
+    @DisplayName("Empty list: nothing is written")
     void emptyInput() {
         assertThat(ingestService.ingest(List.of())).isEqualTo(new IngestResult(0, 0));
     }

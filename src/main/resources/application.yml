@@ -2,12 +2,22 @@ spring:
   application:
     name: dublin-bikes-spring
   config:
-    # 从仓库根目录的 .env 读取密钥（例如 JCDECAUX_API_KEY=...）；.env 不会被提交，文件不存在也不会报错
+    # Read secrets from .env in the repository root (e.g. JCDECAUX_API_KEY=...); .env is never committed, and a missing file is not an error
     import: optional:file:.env[.properties]
+  http:
+    clients:
+      # Timeouts shared by every RestClient: give up connecting after 2 seconds, wait at most 10 seconds for a response
+      connect-timeout: 2s
+      read-timeout: 10s
+  cache:
+    cache-names: currentWeather,weatherForecast
+    caffeine:
+      # Cached entries expire after 5 minutes; repeated requests within 5 minutes do not call OpenWeather again
+      spec: expireAfterWrite=5m,maximumSize=100
   jpa:
     open-in-view: false
     hibernate:
-      # 表结构由 Flyway 负责；Hibernate 只检查实体和表是否对得上，对不上就启动失败
+      # Flyway owns the schema; Hibernate only checks that entities match the tables and fails startup if they do not
       ddl-auto: validate
     properties:
       hibernate:
@@ -20,3 +30,28 @@ app:
   scraper:
     enabled: ${SCRAPER_ENABLED:false}
     interval: 5m
+  forecast:
+    # URL of the Python inference service (ml-service/, runs on port 8001 by default)
+    base-url: ${FORECAST_BASE_URL:http://localhost:8001}
+  openweather:
+    api-key: ${OPENWEATHER_API_KEY:}
+  weather:
+    interval: 10m
+  google:
+    # Key for server-side Geocoding / Directions calls; falls back to the browser key if there is no separate server key
+    server-key: ${GOOGLE_MAPS_SERVER_KEY:${GOOGLE_MAPS_API_KEY:}}
+    # Key the frontend uses to load the map (sent to the browser)
+    browser-key: ${GOOGLE_MAPS_API_KEY:}
+  groq:
+    api-key: ${GROQ_API_KEY:}
+    model: ${GROQ_MODEL:openai/gpt-oss-120b}
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: always

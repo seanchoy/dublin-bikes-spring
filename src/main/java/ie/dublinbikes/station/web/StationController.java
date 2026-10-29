@@ -9,8 +9,8 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.web.bind.annotation.*;
 
-/** Part 6.2：见练习册 Part 6 */
-// TODO 6.2: 标记成 REST Controller，所有接口都在 /api/v1/stations 下面
+/** Part 6.2: see workbook Part 6 */
+// TODO 6.2: mark as a REST controller with every endpoint under /api/v1/stations
 @RestController
 @RequestMapping("/api/v1/stations")
 public class StationController {
@@ -30,16 +30,16 @@ public class StationController {
                 .toList();
     }
 
-    // TODO 6.2b: GET /api/v1/stations/{number}，number 从 URL 路径里取
+    // TODO 6.2b: GET /api/v1/stations/{number}, with number taken from the URL path
     @GetMapping("/{number}")
     public StationResponse getStation(@PathVariable int number) {
         return StationResponse.from(queryService.getStation(number));
     }
 
     // TODO 6.2c: GET /api/v1/stations/nearest?lat=..&lng=..&limit=..&requireBikes=..
-    //   - lat、lng 必填；limit 默认 3；requireBikes 默认 false
+    //   - lat and lng are required; limit defaults to 3; requireBikes defaults to false
     @GetMapping("/nearest")
-    // TODO 6.3b: 参数校验：lat 在 -90~90，lng 在 -180~180，limit 在 1~20
+    // TODO 6.3b: validation: lat between -90 and 90, lng between -180 and 180, limit between 1 and 20
     public List<NearbyStationResponse> nearest(
             @RequestParam @DecimalMin("-90") @DecimalMax("90") double lat,
             @RequestParam  @DecimalMin("-180")@DecimalMax("180") double lng,

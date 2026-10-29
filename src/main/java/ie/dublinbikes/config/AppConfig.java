@@ -10,22 +10,22 @@ import java.time.ZoneId;
 
 
 /**
- * 应用级别的配置类。
+ * Application-wide configuration.
  *
- * Part 2.1 / 2.3：见练习册 Part 2
- * Part 5.3：见练习册 Part 5
+ * Part 2.1 / 2.3: see workbook Part 2
+ * Part 5.3: see workbook Part 5
  */
-// TODO 2.1: 把这个类标记成配置类，并启用 AppProperties 的配置绑定
-// TODO 5.3: 开启定时任务功能
+// TODO 2.1: mark this class as a configuration class and enable binding for AppProperties
+// TODO 5.3: enable scheduled tasks
 @Configuration
 @EnableConfigurationProperties(AppProperties.class)
 @EnableScheduling
 public class AppConfig {
 
-    // TODO 2.3: 把这个方法的返回值注册成一个 Bean
+    // TODO 2.3: register the return value of this method as a Bean
     @Bean
     public Clock clock() {
-        // TODO 2.3: 返回一个使用 Europe/Dublin 时区的系统时钟
+        // TODO 2.3: return a system clock using the Europe/Dublin time zone
         return Clock.system(ZoneId.of("Europe/Dublin"));
     }
 

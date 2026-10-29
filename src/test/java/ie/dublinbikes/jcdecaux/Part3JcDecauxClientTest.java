@@ -28,8 +28,8 @@ import ie.dublinbikes.config.AppConfig;
 import ie.dublinbikes.station.domain.Station;
 
 /**
- * Part 3：用 RestClient 调用外部 API，用 Jackson 把 JSON 转成 record。
- * MockRestServiceServer 会拦截 RestClient 发出的请求，返回我们准备好的假数据，不会真的访问 JCDecaux。
+ * Part 3: calling an external API with RestClient and turning the JSON into records with Jackson.
+ * MockRestServiceServer intercepts the requests RestClient sends and returns prepared fake data, so JCDecaux is never actually called.
  */
 @RestClientTest(JcDecauxClient.class)
 @Import(AppConfig.class)
@@ -48,7 +48,7 @@ class Part3JcDecauxClientTest {
     MockRestServiceServer server;
 
     @Test
-    @DisplayName("3.1 JSON 的 snake_case 字段正确映射到 record")
+    @DisplayName("3.1 snake_case JSON fields map correctly to the record")
     void mapsJsonFields() {
         server.expect(requestTo(EXPECTED_URL))
                 .andRespond(withSuccess(new ClassPathResource("fixtures/jcdecaux-stations.json"), MediaType.APPLICATION_JSON));
@@ -71,7 +71,7 @@ class Part3JcDecauxClientTest {
     }
 
     @Test
-    @DisplayName("3.2 DTO 转成领域对象 Station，last_update 转成 Instant")
+    @DisplayName("3.2 The DTO converts to the Station domain object, with last_update as an Instant")
     void convertsToStation() {
         var dto = new JcDecauxStationDto(42, "dublin", "SMITHFIELD NORTH", "Smithfield North",
                 new JcDecauxStationDto.Position(53.349562, -6.278198), false, false, 30, 27, 3, "OPEN", 1761400800000L);
@@ -88,7 +88,7 @@ class Part3JcDecauxClientTest {
     }
 
     @Test
-    @DisplayName("3.3 请求的 URL、HTTP 方法和查询参数正确")
+    @DisplayName("3.3 The request URL, HTTP method and query parameters are correct")
     void sendsCorrectRequest() {
         server.expect(requestTo(EXPECTED_URL))
                 .andExpect(method(HttpMethod.GET))
@@ -99,7 +99,7 @@ class Part3JcDecauxClientTest {
     }
 
     @Test
-    @DisplayName("3.4 对方返回 4xx/5xx 时抛 JcDecauxException，消息里带状态码")
+    @DisplayName("3.4 On 4xx/5xx it throws JcDecauxException with the status code in the message")
     void httpErrorBecomesJcDecauxException() {
         server.expect(requestTo(EXPECTED_URL)).andRespond(withStatus(HttpStatus.FORBIDDEN));
 
@@ -109,7 +109,7 @@ class Part3JcDecauxClientTest {
     }
 
     @Test
-    @DisplayName("3.4 网络错误时也抛 JcDecauxException，并保留原始异常作为 cause")
+    @DisplayName("3.4 On network errors it also throws JcDecauxException, keeping the original exception as the cause")
     void networkErrorBecomesJcDecauxException() {
         server.expect(requestTo(EXPECTED_URL)).andRespond(withException(new IOException("connection reset")));
 

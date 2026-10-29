@@ -544,14 +544,21 @@
     if (existing) return;
 
     const apiKey = (root && root.dataset.mapsKey) || "";
-    if (!apiKey) {
-      console.error(
-        "Google Maps API key missing: set GOOGLE_MAPS_API_KEY in .env (loaded into app config)."
-      );
+    if (apiKey) {
+      injectMapsScript(apiKey);
       return;
     }
-
-    injectMapsScript(apiKey);
+    // Static page: ask the backend for the browser key instead of having it rendered into the HTML.
+    fetch("/api/v1/journeys/config")
+      .then((r) => r.json())
+      .then(({ googleMapsApiKey }) => {
+        if (!googleMapsApiKey) {
+          console.error("Google Maps API key missing: set GOOGLE_MAPS_API_KEY in .env.");
+          return;
+        }
+        injectMapsScript(googleMapsApiKey);
+      })
+      .catch((e) => console.error("Could not load map configuration", e));
   }
 
   if (document.readyState === "loading") {

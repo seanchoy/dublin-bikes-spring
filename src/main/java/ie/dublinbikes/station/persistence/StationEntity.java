@@ -6,20 +6,20 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 /**
- * station 表的一行。站点的静态信息：名字、位置、总车位数。
+ * One row of the station table: static station information (name, location, total stands).
  *
- * Part 4.1：见练习册 Part 4。表结构在 src/main/resources/db/migration/V1__create_station_tables.sql
+ * Part 4.1: see workbook Part 4. The table is defined in src/main/resources/db/migration/V1__create_station_tables.sql
  */
-// TODO 4.1: 把这个类标记成 JPA 实体，对应 station 表
+// TODO 4.1: mark this class as a JPA entity mapped to the station table
 @Entity
 @Table(name = "station")
 public class StationEntity {
 
-    // TODO 4.1: number 是主键
+    // TODO 4.1: number is the primary key
     @Id
     private int number;
 
-    // TODO 4.1: name 列不允许为空
+    // TODO 4.1: the name column must not be null
     @Column(nullable = false)
     private String name;
 
@@ -31,13 +31,13 @@ public class StationEntity {
 
     private boolean banking;
 
-    // TODO 4.1: 显式指定列名 bike_stands（其实 Spring Boot 会自动把 camelCase 转成 snake_case，这里练习一下写法）
+    // TODO 4.1: name the bike_stands column explicitly (Spring Boot already maps camelCase to snake_case; this is just practice)
     @Column(name = "bike_stands")
     private int bikeStands;
 
     private String status;
 
-    /** JPA 用反射创建对象时需要一个无参构造函数，protected 是为了不让业务代码误用。 */
+    /** JPA needs a no-arg constructor to create objects through reflection; protected keeps business code from using it by mistake. */
     protected StationEntity() {
     }
 

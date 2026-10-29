@@ -5,17 +5,17 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
- * application.yml 里所有 app.* 配置，启动时由 Spring 自动填进来。
+ * All app.* settings from application.yml, filled in by Spring at startup.
  *
- * Part 2.1 / 2.2：见练习册 Part 2
+ * Part 2.1 / 2.2: see workbook Part 2
  */
-// TODO 2.1: 告诉 Spring 这个 record 对应配置文件里以 "app" 开头的配置
+// TODO 2.1: tell Spring this record maps the settings that start with "app"
 @ConfigurationProperties(prefix = "app")
 public record AppProperties(@DefaultValue Jcdecaux jcdecaux, @DefaultValue Scraper scraper) {
 
-    // TODO 2.2: 给下面的字段加默认值：contract 默认 "dublin"，
-    //           baseUrl 默认 "https://api.jcdecaux.com/vls/v1"，enabled 默认 false，interval 默认 5 分钟。
-    //           还要保证什么都没配置时，jcdecaux() 和 scraper() 本身也不是 null。
+    // TODO 2.2: add defaults for the fields below: contract "dublin",
+    //           baseUrl "https://api.jcdecaux.com/vls/v1", enabled false, interval 5 minutes.
+    //           Also make sure jcdecaux() and scraper() are not null when nothing is configured.
 
     public record Jcdecaux(
             String apiKey,

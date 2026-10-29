@@ -7,14 +7,14 @@ import java.util.List;
 import java.util.Optional;
 
 
-// TODO 2.4: 让 Spring 能通过组件扫描找到这个类（Part 2）
+// TODO 2.4: let Spring find this class through component scanning (Part 2)
 @Component
 public class StationFinder {
 
-    /** Part 1.3 + 1.4：见练习册 Part 1 */
+    /** Part 1.3 + 1.4: see workbook Part 1 */
     public List<NearbyStation> findNearest(double lat, double lng, List<Station> stations,
                                            boolean requireBikes, boolean requireStands, int limit) {
-        // TODO 1.3: 计算距离、按距离从近到远排序、只取前 limit 个。要求用 Stream 写，不要用 for 循环
+        // TODO 1.3: compute distances, sort nearest first and keep only the first limit. Use a Stream, not a for loop
         if(limit < 0){
             throw new IllegalArgumentException("invalid: limit < 0");
         }
@@ -27,12 +27,12 @@ public class StationFinder {
                 .limit(limit)
                 .toList();
         return nearbyStation;
-        // TODO 1.4: 加上 requireBikes / requireStands 两个过滤条件
+        // TODO 1.4: add the requireBikes / requireStands filters
     }
 
     /** Part 1.5 */
     public Optional<Station> findByNumber(List<Station> stations, int number) {
-        // TODO 1.5: 找到编号为 number 的站点；找不到返回 Optional.empty()
+        // TODO 1.5: find the station with this number; return Optional.empty() if there is none
         Optional<Station> stationbyNumber = stations.stream()
                 .filter(s -> s.number() == number)
                 .findAny();

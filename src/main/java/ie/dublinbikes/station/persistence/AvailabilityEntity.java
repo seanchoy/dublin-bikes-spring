@@ -6,24 +6,24 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
 /**
- * availability 表的一行：某个站点在某个时刻有几辆车、几个空位。
+ * One row of the availability table: how many bikes and free stands a station had at one moment.
  *
- * Part 4.2：见练习册 Part 4
+ * Part 4.2: see workbook Part 4
  */
-// TODO 4.2: 标记成 JPA 实体，对应 availability 表
+// TODO 4.2: mark as a JPA entity mapped to the availability table
 @Entity
 @Table(name = "availability")
 public class AvailabilityEntity {
 
-    // TODO 4.2: 这个字段是复合主键
+    // TODO 4.2: this field is a composite primary key
     @EmbeddedId
     private AvailabilityId id;
 
-    // TODO 4.2: 对应 available_bikes 列
+    // TODO 4.2: maps to the available_bikes column
     @Column(name = "available_bikes")
     private int availableBikes;
 
-    // TODO 4.2: 对应 available_bike_stands 列
+    // TODO 4.2: maps to the available_bike_stands column
     @Column(name = "available_bike_stands")
     private int availableBikeStands;
 

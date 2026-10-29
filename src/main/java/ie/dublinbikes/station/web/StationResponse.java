@@ -2,7 +2,7 @@ package ie.dublinbikes.station.web;
 
 import ie.dublinbikes.station.domain.Station;
 
-/** GET /api/v1/stations 返回给前端的 JSON 格式。 */
+/** JSON returned to the frontend by GET /api/v1/stations. */
 public record StationResponse(
         int number,
         String name,
