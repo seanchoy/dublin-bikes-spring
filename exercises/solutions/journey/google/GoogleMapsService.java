@@ -1,5 +1,7 @@
 package ie.dublinbikes.journey.google;
 
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
@@ -8,6 +10,7 @@ import ie.dublinbikes.journey.JourneyException;
 import ie.dublinbikes.journey.JourneyException.Reason;
 import ie.dublinbikes.journey.LatLng;
 import ie.dublinbikes.journey.RouteLeg;
+import ie.dublinbikes.journey.RouteStep;
 import ie.dublinbikes.journey.TravelMode;
 
 @Service
@@ -42,7 +45,19 @@ public class GoogleMapsService {
         GoogleDto.Route route = response.routes().get(0);
         GoogleDto.Leg leg = route.legs().get(0);
         return new RouteLeg(mode, leg.distance().value(), leg.duration().value(),
-                leg.distance().text(), leg.duration().text(), route.overviewPolyline().points());
+                leg.distance().text(), leg.duration().text(), route.overviewPolyline().points(), toSteps(leg.steps()));
+    }
+
+    /** Google may leave out steps, or a step's distance / duration, so every part is optional. */
+    private static List<RouteStep> toSteps(List<GoogleDto.Step> steps) {
+        if (steps == null) {
+            return List.of();
+        }
+        return steps.stream()
+                .map(s -> new RouteStep(s.htmlInstructions(),
+                        s.distance() == null ? null : s.distance().text(),
+                        s.duration() == null ? null : s.duration().text()))
+                .toList();
     }
 
     private static <T> T call(java.util.function.Supplier<T> request) {

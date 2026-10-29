@@ -125,7 +125,9 @@ Service。
 \textbf{b) \code{directions(from, to, mode)}}：\code{origin}、\code{destination} 用 \code{LatLng.toParam()}（\code{"53.3498,-6.2603"}），\code{mode} 用 \code{mode.param()}（枚举里存的 Google 参数值，比如 \code{"bicycling"}）；取第一条路线的第一段（\code{routes[0].legs[0]}，Java 里是 \code{routes().get(0).legs().get(0)}），转成：
 
 \begin{plaincode}
-RouteLeg(mode, distance.value, duration.value, distance.text, duration.text, routes[0].overviewPolyline.points)
+RouteLeg(mode, distance.value, duration.value, distance.text, duration.text,
+         routes[0].overviewPolyline.points,
+         steps)   // legs[0].steps 的每一步转成 RouteStep(html_instructions, distance.text, duration.text)
 \end{plaincode}
 
 \textbf{c) 错误}：都抛 \code{JourneyException}，构造函数是 \code{new JourneyException(Reason.XXX, 消息)}（对照知识点里的表）：

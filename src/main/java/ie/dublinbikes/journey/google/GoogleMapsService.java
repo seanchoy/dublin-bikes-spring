@@ -61,12 +61,25 @@ public class GoogleMapsService {
             }
 
             GoogleDto.Leg leg = routes.get(0).legs().get(0);
-            return new RouteLeg(mode, leg.distance().value(), leg.duration().value(), leg.distance().text(), leg.duration().text(), routes.get(0).overviewPolyline().points());
+            return new RouteLeg(mode, leg.distance().value(), leg.duration().value(), leg.distance().text(), leg.duration().text(),
+                    routes.get(0).overviewPolyline().points(), toSteps(leg.steps()));
         }catch (RestClientException e){
 
             throw new JourneyException(JourneyException.Reason.ROUTE_UNAVAILABLE, "Google Map is unavaliable: " + e.getMessage());
         }
 
 
+    }
+
+    /** Google may leave out steps, or a step's distance / duration, so every part is optional. */
+    private static List<RouteStep> toSteps(List<GoogleDto.Step> steps) {
+        if (steps == null) {
+            return List.of();
+        }
+        return steps.stream()
+                .map(s -> new RouteStep(s.htmlInstructions(),
+                        s.distance() == null ? null : s.distance().text(),
+                        s.duration() == null ? null : s.duration().text()))
+                .toList();
     }
 }

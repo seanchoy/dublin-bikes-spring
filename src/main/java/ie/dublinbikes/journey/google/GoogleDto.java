@@ -27,7 +27,12 @@ public final class GoogleDto {
     public record TextValue(String text, long value) {
     }
 
-    public record Leg(TextValue distance, TextValue duration) {
+    /** One turn-by-turn instruction; html_instructions contains HTML such as {@code <b>}. */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record Step(String htmlInstructions, TextValue distance, TextValue duration) {
+    }
+
+    public record Leg(TextValue distance, TextValue duration, List<Step> steps) {
     }
 
     public record Polyline(String points) {

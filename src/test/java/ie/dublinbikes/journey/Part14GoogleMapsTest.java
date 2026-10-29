@@ -9,6 +9,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.DisplayName;
@@ -99,7 +100,8 @@ class Part14GoogleMapsTest {
 
         RouteLeg leg = maps.directions(new LatLng(53.3498, -6.2603), new LatLng(53.3381, -6.2591), TravelMode.BICYCLING);
 
-        assertThat(leg).isEqualTo(new RouteLeg(TravelMode.BICYCLING, 1634, 372, "1.6 km", "6 mins", "a~l~Fjk~uOwHJy@P"));
+        assertThat(leg).isEqualTo(new RouteLeg(TravelMode.BICYCLING, 1634, 372, "1.6 km", "6 mins", "a~l~Fjk~uOwHJy@P",
+                List.of(new RouteStep("Head <b>south</b>", "0.2 km", null))));    // the fixture's step has no duration
     }
 
     @Test

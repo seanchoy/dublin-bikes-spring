@@ -93,31 +93,56 @@
     duration_text: l.durationText,
     duration_s: l.durationSeconds,
     polyline: l.polyline,
-    steps: [],
+    steps: (l.steps || []).map((s) => ({
+      instruction: s.instruction || "",
+      distance: s.distanceText || "",
+      duration: s.durationText || "",
+    })),
   });
+
+  // "2026-10-30 08:00:00" -> "2026-10-30T08:00" (Dublin local time, which is what the backend expects)
+  const toDepartAt = (time) => String(time).trim().replace(" ", "T").slice(0, 16);
+
+  // With a prediction, the station cards show the expected numbers at that time instead of the live ones.
+  const withOutlook = (station, outlook) =>
+    outlook && outlook.predicted
+      ? {
+          ...station,
+          available_bikes: Math.round(outlook.bikes),
+          available_stands: Math.round(outlook.docks),
+          available_bike_stands: Math.round(outlook.docks),
+        }
+      : station;
+
+  const postJson = (path, body) =>
+    realFetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
   async function journey(init, predicted) {
     const body = JSON.parse(init.body || "{}");
-    const res = await realFetch("/api/v1/journeys", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ start: body.start, end: body.end }),
-    });
+    const res = predicted
+      ? await postJson("/api/v1/journeys/predict", { start: body.start, end: body.end, departAt: toDepartAt(body.time) })
+      : await postJson("/api/v1/journeys", { start: body.start, end: body.end });
     const data = await res.json();
     if (!res.ok) return json({ error: data.detail || data.title || "Route unavailable" }, res.status);
+
+    const plan = predicted ? data.journey : data;
+    const pickupOutlook = predicted ? data.pickupOutlook : null;
+    const dropoffOutlook = predicted ? data.dropoffOutlook : null;
+    // The backend falls back to live data when the forecast service is down; only say "predicted" if it really was.
+    const usedPrediction = Boolean(predicted && (pickupOutlook.predicted || dropoffOutlook.predicted));
     return json({
-      start: { ...data.start, address: body.start },
-      end: { ...data.end, address: body.end },
-      pickup_station: oldStation(data.pickup),
-      dropoff_station: oldStation(data.dropoff),
+      start: { ...plan.start, address: body.start },
+      end: { ...plan.end, address: body.end },
+      pickup_station: withOutlook(oldStation(plan.pickup), pickupOutlook),
+      dropoff_station: withOutlook(oldStation(plan.dropoff), dropoffOutlook),
       legs: {
-        walk_to_bike: oldLeg(data.walkToPickup),
-        cycle: oldLeg(data.cycle),
-        walk_from_bike: oldLeg(data.walkFromDropoff),
+        walk_to_bike: oldLeg(plan.walkToPickup),
+        cycle: oldLeg(plan.cycle),
+        walk_from_bike: oldLeg(plan.walkFromDropoff),
       },
-      summary: { total_distance: data.totalDistanceMeters, total_duration_s: data.totalDurationSeconds },
-      prediction_mode: false,
-      weather_warning: predicted ? "Predicted routes are not available yet; showing live availability." : null,
+      summary: { total_distance: plan.totalDistanceMeters, total_duration_s: plan.totalDurationSeconds },
+      prediction_mode: usedPrediction,
+      weather_warning: null,
     });
   }
 
