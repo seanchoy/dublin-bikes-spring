@@ -1,0 +1,8 @@
+target/
+ml-service/
+exercises/
+notes/
+.idea/
+.git/
+.env
+*.iml

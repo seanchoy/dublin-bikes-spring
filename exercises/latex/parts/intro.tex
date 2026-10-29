@@ -40,15 +40,32 @@
 \toprule
 关卡 & 内容 & 测试 & 预计用时 \\
 \midrule
-Part 1 & 现代 Java：record、Stream、Optional（不涉及 Spring） & \code{Part1*} & 1 小时 \\
+Part 1 & 现代 Java：record、Stream、Optional（不涉及 Spring） & \code{Part1Modern*} & 1 小时 \\
 Part 2 & Spring 核心：容器、Bean、依赖注入、配置绑定 & \code{Part2*} & 1 小时 \\
 Part 3 & 调用外部 API：RestClient、JSON 映射、错误处理 & \code{Part3*} & 1 小时 \\
 Part 4 & 数据库：JPA 实体、复合主键、Repository 查询 & \code{Part4*} & 1.5--2 小时 \\
 Part 5 & 事务和定时任务：\code{@Transactional}、\code{@Scheduled}、Mockito & \code{Part5*} & 1 小时 \\
 Part 6 & REST API：Controller、参数校验、统一错误处理 & \code{Part6*} & 1.5 小时 \\
+\midrule
+Part 7 & 调用 Python 推理服务：POST、\code{@JsonNaming}、超时 & \code{Part7*} & 1 小时 \\
+Part 8 & 重试、熔断、降级：Resilience4j & \code{Part8*} & 1.5 小时 \\
+Part 9 & 预测接口：Clock、降级响应、两个方向的 DTO & \code{Part9*} & 1 小时 \\
+Part 10 & API 文档与健康检查：springdoc、Actuator & \code{Part10*} & 1 小时 \\
+\midrule
+Part 11 & OpenWeather 客户端与缓存：\code{@Cacheable} & \code{Part11*} & 1 小时 \\
+Part 12 & 天气入库：Flyway V2、\code{Limit}、两种写入策略 & \code{Part12*} & 1 小时 \\
+Part 13 & 天气接口、多个 advice、时间匹配 & \code{Part13*} & 1 小时 \\
+\midrule
+Part 14 & 声明式 HTTP 客户端：\code{@HttpExchange} 调 Google Maps & \code{Part14*} & 1 小时 \\
+Part 15 & 路线接口：\code{@RequestBody}、\code{@Valid}、按原因映射状态码 & \code{Part15*} & 1 小时 \\
+\midrule
+Part 16 & 调用 LLM：请求头认证、429 限流 & \code{Part16*} & 1 小时 \\
+Part 17 & 聊天接口：提示词、不可信输入、\code{ResponseEntity} & \code{Part17*} & 1 小时 \\
 \bottomrule
 \end{tabularx}
 \end{center}
+
+\textbf{Part 7--17（ML 集成、工程化、天气、路线、聊天机器人）是第二批}，前提是 Part 1--6 已经全部做完。
 
 \textbf{按顺序做。}后面的关卡会用到前面写的代码，但每一关的测试是独立的：做完 Part 2 时，Part 1、2 的测试会全绿，Part 3 以后的测试还是红的，这是正常的。
 
@@ -57,7 +74,7 @@ Part 6 & REST API：Controller、参数校验、统一错误处理 & \code{Part6
 \begin{enumerate}
   \item 用 IntelliJ IDEA 打开仓库的根目录（有 \code{pom.xml} 的那一层），等它自动导入 Maven 项目。
   \item 确认 Project SDK 是 Java 25（File → Project Structure → Project）。
-  \item 跑一次全部测试，确认环境没问题。应该能编译，58 个测试里 57 个失败（只有 1 个检查 record 自动生成方法的测试会通过）：
+  \item 跑一次全部测试，确认环境没问题。应该能编译，每做完一关，那一关的测试会变绿（Part 1--6 做完时 58 个全绿；加上 Part 7--17 一共 152 个）：
 \end{enumerate}
 
 \begin{shell}
@@ -71,7 +88,7 @@ Part 6 & REST API：Controller、参数校验、统一错误处理 & \code{Part6
 \begin{enumerate}
   \item 读这一关的“知识点”，再读题目。
   \item 在 \code{src/main/java} 里搜 \code{TODO 1.1} 这样的标记，找到要改的地方。
-  \item 跑这一关的测试：\code{./mvnw test -Dtest='Part1*'}。在 IntelliJ 里也可以直接点测试类旁边的绿色三角形，结果更直观。
+  \item 跑这一关的测试：\code{./mvnw test -Dtest='Part2*'}（Part 1 要写成 \code{'Part1Modern*'}，因为 \code{Part1*} 也会匹配到 Part 10--13）。在 IntelliJ 里也可以直接点测试类旁边的绿色三角形，结果更直观。
   \item 测试全绿后提交一次 commit，再进入下一关。
 \end{enumerate}
 
@@ -91,11 +108,11 @@ Part 6 & REST API：Controller、参数校验、统一错误处理 & \code{Part6
 \section*{全部做完以后}
 
 \begin{shell}
-./mvnw test                                  # 58 个测试全绿
+./mvnw test                                  # 全部测试
 SCRAPER_ENABLED=true ./mvnw spring-boot:run
 \end{shell}
 
-几秒后打开 \url{http://localhost:8080} 就能看到地图上的 113 个站点。运行前先在仓库根目录建一个 \code{.env} 文件，写一行 \code{JCDECAUX_API_KEY=你的key}（可以从原项目的 \code{var.env} 里复制）。\code{.env} 已经在 \code{.gitignore} 里，不会被提交。
+几秒后打开 \url{http://localhost:8080/map.html} 就能看到地图上的 113 个站点。运行前先在仓库根目录建一个 \code{.env} 文件，写一行 \code{JCDECAUX_API_KEY=你的key}（可以从原项目的 \code{var.env} 里复制）。\code{.env} 已经在 \code{.gitignore} 里，不会被提交。
 
 想连真实的 MySQL 而不是内存数据库（这条路径还没有实际测试过）：
 

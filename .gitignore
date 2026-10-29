@@ -3,8 +3,12 @@
 .env*
 
 # ML models (too large for git; copied to the server separately)
-models/
+ml-service/models/*.pkl
 *.onnx
+
+# Python
+.venv/
+__pycache__/
 
 # Maven
 target/

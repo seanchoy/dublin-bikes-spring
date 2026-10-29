@@ -1,0 +1,118 @@
+\chapter{调用 LLM：请求头、认证与限流}
+
+迁移聊天机器人。原项目用的是 Groq（一家提供 LLM 推理的服务商），接口和 OpenAI 的 Chat Completions 格式一样。这一关写调用它的客户端，重点是三件之前没碰过的事：\textbf{请求头认证}、\textbf{没配置 key 时的处理}、\textbf{429 限流}。
+
+\partinfo{%
+  \code{chat/GroqClient.java}：16.1--16.3%
+}{\code{./mvnw test -Dtest='Part16*'}}
+
+\textbf{已经写好、不要改的类：}\code{GroqProperties}、\code{ChatConfig}、\code{ChatMessage}、\code{ChatException}、\code{GroqDto}、\code{ChatRequest}、\code{ChatResponse}。
+
+\begin{note}[真实运行要加 key]
+\code{.env} 里加一行 \code{GROQ_API_KEY=...}（从原项目的 \code{var.env} 复制）。我用真实的 Groq 测过：问“Smithfield North 现在有几辆车”，回答和实时数据一致，响应约 6 秒。
+\end{note}
+
+\section{知识点}
+
+\subsection{OpenAI 格式的 Chat Completions}
+
+\begin{jsoncode}
+POST https://api.groq.com/openai/v1/chat/completions
+Authorization: Bearer gsk_xxx
+{
+  "model": "openai/gpt-oss-120b",
+  "messages": [
+    { "role": "system", "content": "You are a helpful assistant for Dublin Bikes..." },
+    { "role": "user",   "content": "Any bikes at Smithfield?" }
+  ],
+  "max_tokens": 800,
+  "temperature": 0.7
+}
+
+-> { "choices": [ { "message": { "role": "assistant", "content": "Smithfield North has 20 bikes." } } ] }
+\end{jsoncode}
+
+\begin{itemize}
+  \item LLM 本身\textbf{没有记忆}，每次都要把完整的聊天记录发过去；
+  \item \code{system} 消息是给模型的“说明书”，放在最前面；
+  \item 几乎所有 LLM 服务商（OpenAI、Groq、很多开源模型的服务）都兼容这个格式，换服务商通常只要改 \code{baseUrl} 和 \code{model}。
+\end{itemize}
+
+\subsection{请求头认证：Bearer Token}
+
+API key 放在 \code{Authorization} 请求头里，格式是 \code{Bearer} 加一个空格再加 key。RestClient 加请求头：
+
+\begin{java}
+restClient.post()
+        .uri("/orders")
+        .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)   // HttpHeaders 里有常用请求头的常量
+        ...
+\end{java}
+
+为什么不像 JCDecaux、OpenWeather 那样把 key 放在 URL 查询参数里？URL 会出现在服务器日志、代理日志、浏览器历史里；请求头一般不会被记录。Part 3 想一想第 3 题问过这个。
+
+\subsection{没配置 key：提前失败}
+
+key 为空时，与其发一个注定 401 的请求，不如\textbf{直接}抛 \code{ChatException(NOT_CONFIGURED)}，错误信息也更明确（“没配置 \code{GROQ_API_KEY}”比“Groq 返回 401”好排查）。
+
+\subsection{429 Too Many Requests 和 Retry-After}
+
+LLM 服务都有限流。超过限额时返回 429，通常带一个 \code{Retry-After} 响应头，告诉你多少秒后再试。
+
+原项目遇到 429 会在服务端 \code{time.sleep(...)} 等一会儿再重试。在 Web 服务里这样做不好：\textbf{一个请求线程被睡眠占住}，限流期间请求一多，线程就全被睡眠占满了。这里改成：服务端不等，把“多少秒后再试”告诉前端，由前端决定（Part 17 会把它放进响应头）。
+
+读响应头（拿到的是字符串，可能是 null）：
+\begin{java}
+String retryAfter = res.getHeaders().getFirst(HttpHeaders.RETRY_AFTER);   // 写在 onStatus 的 lambda 里
+\end{java}
+
+\textbf{两个 \code{onStatus} 的顺序}：RestClient 按注册顺序检查，先匹配到的先处理。所以“429”那个要写在“所有错误”那个前面。
+
+\section{题目}
+
+\begin{task}{16.1\quad 交给 Spring 管理，没有 key 时提前失败}
+\code{GroqClient} 交给 Spring 管理；用 \code{properties.baseUrl()} 创建 RestClient，替换构造函数里的 \code{this.restClient = null;}（和 Part 7 的 \code{ForecastClient} 一样）。
+
+\code{complete(messages)}：\code{properties.apiKey()} 是 null 或空白时，直接抛 \code{new ChatException(Reason.NOT_CONFIGURED, ...)}，\textbf{不发请求}。
+\end{task}
+
+\begin{task}{16.2\quad 发请求}
+\code{POST /chat/completions}：
+\begin{itemize}
+  \item 请求头 \code{Authorization: Bearer {apiKey}}；
+  \item 请求体 \code{new GroqDto.CompletionRequest(model, messages, maxTokens, temperature)}：\code{messages} 是方法的参数（完整的聊天记录，Part 17 拼好传进来），其他三个从 \code{properties} 取。\code{CompletionRequest} 上已经有 \code{@JsonNaming}，\code{maxTokens} 会被写成 \code{max_tokens}；
+  \item 响应转成 \code{GroqDto.CompletionResponse}，返回 \code{choices[0].message.content}，Java 里是 \code{response.choices().get(0).message().content()}（和 Part 14 一样，一层 JSON 对应一层 record）。
+\end{itemize}
+\end{task}
+
+\begin{task}{16.3\quad 限流和错误}
+\begin{itemize}
+  \item 429：抛 \code{new ChatException(Reason.RATE_LIMITED, 消息, 秒数)}，秒数从 \code{Retry-After} 响应头解析；没有这个头、或者不是整数时用 5；
+  \item 其他 4xx/5xx、网络错误：\code{ChatException(Reason.UNAVAILABLE, ...)}。
+\end{itemize}
+
+几个写法上的提示：
+\begin{itemize}
+  \item 只匹配 429 的 \code{onStatus}：第一个参数是一个判断状态码的 lambda，比如 \code{status -> status.value() == 429}（也可以用常量 \code{HttpStatus.TOO_MANY_REQUESTS.value()}）。它要写在 \code{HttpStatusCode::isError} 那个\textbf{前面}。
+  \item \code{Retry-After} 有两种合法格式：秒数（\code{"12"}），或者一个 HTTP 日期。只处理秒数：\code{Integer.parseInt(header.trim())}，不是整数时会抛 \code{NumberFormatException}，catch 住用 5。header 是 null 时要先判断。建议写成一个单独的小方法。
+  \item 网络错误用 try/catch 接 \code{RestClientException}。\code{onStatus} 里抛的 \code{ChatException} 不是 \code{RestClientException}，会直接穿过这个 catch，不会被改成 \code{UNAVAILABLE}。所以不要写 \code{catch (Exception e)}（Part 7 的教训）。
+\end{itemize}
+
+\begin{example}
+\begin{plaincode}
+429，Retry-After: 12                   ->  RATE_LIMITED, retryAfterSeconds = 12
+429，没有 Retry-After                   ->  RATE_LIMITED, retryAfterSeconds = 5
+429，Retry-After: Wed, 29 Oct 2026 ...  ->  RATE_LIMITED, retryAfterSeconds = 5（不是整数）
+500 / 连接被重置                        ->  UNAVAILABLE
+\end{plaincode}
+\end{example}
+\end{task}
+
+\begin{think}
+\begin{enumerate}
+  \item 为什么不在服务端 sleep 等限流结束？如果一定要在服务端重试，应该怎么做？
+  \item API key 放在请求头和放在 URL 里，安全性有什么区别？
+  \item 一次聊天把 50 个站点的数据都放进提示词，会带来什么成本？（提示：token 数、延迟、价格）
+  \item 如果要换成 OpenAI 或别的模型服务商，这个项目要改哪些地方？
+\end{enumerate}
+\end{think}

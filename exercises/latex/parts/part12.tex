@@ -1,0 +1,117 @@
+\chapter{天气入库：Flyway V2、Limit 查询、两种写入策略}
+
+和 Part 4、5 的车站数据一样，天气也定时抓取、存进数据库。这一关新的地方有三个：第二个 Flyway 版本、带数量限制的派生查询，以及\textbf{同一次导入里两种不同的写入策略}。
+
+\partinfo{%
+  \code{weather/persistence/CurrentWeatherRepository.java}、\code{ForecastWeatherRepository.java}：12.1\\
+  \code{weather/ingest/WeatherIngestService.java}：12.2\\
+  \code{weather/ingest/WeatherScrapeJob.java}：12.3%
+}{\code{./mvnw test -Dtest='Part12*'}}
+
+\section{知识点}
+
+\subsection{Flyway 的第二个版本}
+
+打开 \code{src/main/resources/db/migration/V2__create_weather_tables.sql}。V1 已经在你的数据库里执行过了，Flyway 在 \code{flyway_schema_history} 表里记着；启动时它发现多了一个 V2，就只执行 V2。\textbf{已经执行过的脚本永远不要改}，要改表就再写 V3。
+
+两个实体 \code{CurrentWeatherEntity}、\code{ForecastWeatherEntity} 已经写好了（Part 4 练过实体注解，这里不再重复）。注意它们的主键都是一个 \code{Instant}。
+
+\subsection{三个时间，别混在一起}
+
+这一关会同时遇到三种“时间”。它们来自不同的地方，含义也不同：
+
+\begin{center}
+\begin{tabularx}{\textwidth}{l l >{\raggedright\arraybackslash}X}
+\toprule
+字段 & 谁定的 & 意思 \\
+\midrule
+\code{observedAt} & OpenWeather & 这条实时天气是\textbf{什么时候测量的}（就是 API 返回的 \code{dt}，也是 \code{current.time()}） \\
+\code{forecastTime} & OpenWeather & 这条预报说的是\textbf{未来哪个时刻}的天气 \\
+\code{fetchedAt} & 我们的 \code{clock} & 我们\textbf{什么时候抓到}这条预报的 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{note}[“实时天气”不是“时间等于现在”]
+\begin{itemize}
+  \item 数据库里不会有“现在这一秒”的记录：抓取任务每 10 分钟才存一条，存的时间是 OpenWeather 的\textbf{测量时间}。所以“实时天气”指的是\textbf{最新的一次观测}（12.1a 按 \code{observedAt} 倒序取第一条），它可能是几分钟前测的。
+  \item 判断“这条实时天气存过没有”（12.2a），比的是\textbf{这次抓到的测量时间}和\textbf{数据库里存过的测量时间}。两边都是 OpenWeather 给的：同一次测量抓两次，时间戳一模一样，所以用 \code{existsById(current.time())} 判断是可靠的。
+  \item 不要拿测量时间去和 \code{clock}（“现在”）比是否相等：我们服务器的钟和 OpenWeather 什么时候测量毫无关系，几乎永远不相等。和“现在”打交道要用范围（\code{>=}、\code{<}），比如 12.1b 的“现在以后的预报”。\code{clock} 在这一关只用来填 \code{fetchedAt}。
+\end{itemize}
+\end{note}
+
+\subsection{同一次导入，两种写入策略}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{l X X}
+\toprule
+ & 实时天气 \code{weather_current} & 天气预报 \code{weather_forecast} \\
+\midrule
+主键 & 观测时间 & 预报的是哪个时刻 \\
+数据会变吗 & 不会：18:00 观测到的就是那个值 & \textbf{会}：明天 9 点的预报，今天早上和今天晚上抓到的可能不一样 \\
+写入策略 & 已经存在就跳过（只增不改，幂等） & \textbf{upsert}：同一时刻用最新的预报覆盖 \\
+对应 Part 5 & 可用量 \code{availability} & 站点 \code{station} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+选哪种策略，取决于“同一个主键再来一次时，新数据是不是更准”。
+
+\subsection{带数量限制的派生查询：Limit}
+
+\begin{java}
+List<Order> findByCreatedAtGreaterThanEqualOrderByCreatedAtAsc(Instant from, Limit limit);
+
+repository.findByCreatedAtGreaterThanEqualOrderByCreatedAtAsc(start, Limit.of(10));   // 最多 10 条
+\end{java}
+
+\begin{itemize}
+  \item \code{GreaterThanEqual} 对应 \code{>=}；还有 \code{GreaterThan}、\code{LessThan}、\code{Between} 等。
+  \item 最后一个参数是 \code{Limit}（包 \code{org.springframework.data.domain}），Spring Data 会把它变成 SQL 的 \code{LIMIT}。
+  \item \code{By} 后面也可以什么条件都没有（每写一个属性就要多一个参数，没有属性就没有参数）：\code{findFirstByOrderByCreatedAtDesc()} 就是“全表按时间倒序取第一条”。
+\end{itemize}
+
+\section{题目}
+
+\begin{task}{12.1\quad 两个查询}
+\textbf{a)} \code{CurrentWeatherRepository}：声明派生查询“按 \code{observedAt} 倒序取第一条”，\code{latest()} 调用它。这就是“当前天气”：最新的一次观测，不需要任何参数。
+
+\textbf{b)} \code{ForecastWeatherRepository}：声明派生查询“\code{forecastTime >= from}，按 \code{forecastTime} 升序，最多 \code{limit} 条”，\code{upcoming(from, limit)} 调用它。
+
+\begin{example}
+\begin{plaincode}
+预报时刻：15:00, 18:00, 21:00, 00:00, 03:00
+upcoming(18:00, 3)  ->  [18:00, 21:00, 00:00]
+\end{plaincode}
+\end{example}
+\end{task}
+
+\begin{task}{12.2\quad WeatherIngestService}
+Service，\code{ingest} 在一个事务里。
+\begin{itemize}
+  \item \textbf{a) 实时天气}：参数 \code{current} 是\textbf{刚从 OpenWeather 抓回来的}那条实时天气，\code{current.time()} 是它的测量时间（不是“现在”）。这个测量时间在数据库里不存在才插入（\code{CurrentWeatherEntity.from(current)}）；存在说明 OpenWeather 还没更新，这次抓到的是重复数据，跳过。
+  \item \textbf{b) 预报}：每一条按 \code{time()} upsert：找不到就 \code{new ForecastWeatherEntity(时间)}；然后 \code{update(snapshot, 现在)} 再保存。“现在”用注入的 \code{clock}：\code{Instant.now(clock)}。
+\end{itemize}
+返回 \code{WeatherIngestResult(实时天气是否插入了, 预报条数)}。
+
+\begin{example}
+\begin{plaincode}
+第一次：实时 18:00，预报 3 条            ->  WeatherIngestResult(true, 3)
+同一条实时天气再来一次                   ->  currentInserted = false，表里还是 1 行
+新一轮预报，21:00 那一档从 9.0 度变成 6.5 度 ->  预报还是 3 行，21:00 那行变成 6.5 度
+\end{plaincode}
+\end{example}
+\end{task}
+
+\begin{task}{12.3\quad WeatherScrapeJob}
+照着 Part 5 的 \code{StationScrapeJob} 写：交给 Spring 管理；\code{run()} 每隔 \code{${app.weather.interval:10m}} 执行一次；开关（\code{app.scraper.enabled}）关闭就返回；否则 \code{client.current()}、\code{client.forecast()} 交给 \code{ingestService.ingest(...)}，打 info 日志；\code{WeatherUnavailableException} 只打 warn。
+\end{task}
+
+\begin{think}
+\begin{enumerate}
+  \item 天气预报为什么用 upsert，而实时天气只增不改？
+  \item 天气抓取是每 10 分钟一次，而客户端有 5 分钟缓存。抓取时会不会拿到缓存里的旧数据？会不会有问题？
+  \item V1 已经上线了，现在发现 \code{station} 表少一列，该怎么加？
+  \item 预报表会一直变大吗？过期的预报要不要删？怎么删？
+\end{enumerate}
+\end{think}

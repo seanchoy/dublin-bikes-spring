@@ -1,5 +1,8 @@
-# 本地 MySQL（可选）。默认配置用内存 H2，不需要这个文件。
-# 启动：docker compose up -d   然后用 mysql profile 运行应用（见 exercises/README.md）
+# Start the whole system with one command: docker compose up --build
+#   mysql       database
+#   ml-service  Python inference service (models mounted from ./ml-service/models)
+#   app         Spring Boot backend, http://localhost:8080
+# JCDECAUX_API_KEY is read from .env in the repository root.
 services:
   mysql:
     image: mysql:8.4
@@ -12,6 +15,43 @@ services:
       - "3307:3306"
     volumes:
       - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ubikes", "-pbikes"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  ml-service:
+    build: ./ml-service
+    volumes:
+      - ./ml-service/models:/app/models:ro
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 5s
+      timeout: 3s
+      start_period: 60s
+      retries: 20
+
+  app:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SPRING_PROFILES_ACTIVE: mysql
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      FORECAST_BASE_URL: http://ml-service:8001
+      SCRAPER_ENABLED: "true"
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      ml-service:
+        condition: service_healthy
 
 volumes:
   mysql-data:
