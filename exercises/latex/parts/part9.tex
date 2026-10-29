@@ -1,0 +1,132 @@
+\chapter{预测接口：Clock、降级响应与两个方向的 DTO}
+
+把前两关串起来：前端请求某个站点的预测，Service 算出要预测哪些时间点、查站点容量、调推理服务，Controller 把结果返回给前端。做完这一关，地图上点一个站点就能看到未来几小时的车辆预测。
+
+\partinfo{%
+  \code{forecast/StationForecastService.java}：9.1\\
+  \code{forecast/StationForecastController.java}：9.2、9.3%
+}{\code{./mvnw test -Dtest='Part9*'}，最后 \code{./mvnw test}}
+
+\section{知识点}
+
+\subsection{Clock 终于用上了}
+
+Part 2.3 你注册了一个 \code{Clock} Bean，当时还没地方用。现在要算“从下一个整点开始的 8 个小时”，这正是需要“现在几点”的地方：
+
+\begin{java}
+LocalDateTime now = LocalDateTime.now(clock);                  // 用注入的 clock，不用 LocalDateTime.now()
+LocalDateTime hour = now.truncatedTo(ChronoUnit.HOURS);        // 去掉分钟和秒：17:20 -> 17:00
+boolean later = now.isAfter(hour);                             // 17:20 在 17:00 之后吗？
+LocalDateTime next = hour.plusHours(1);                        // 18:00
+\end{java}
+
+测试里传的是 \code{Clock.fixed(...)}，“现在”被固定成 17:20，所以“下一个整点”永远是 18:00，测试结果不会随运行时间变化。这就是 Part 2 想一想第 3 题的实际例子。
+
+\textbf{生成连续的时间点}：Part 1 学过 Stream，这里换一种来源，\code{IntStream.range(0, n)} 产生 0, 1, ..., n-1：
+
+\begin{java}
+List<LocalDate> days = IntStream.range(0, 7)
+        .mapToObj(i -> today.plusDays(i))      // 0 -> 今天，1 -> 明天，……
+        .toList();
+\end{java}
+
+lambda 里用到的外部变量必须是“事实上 final”的（赋值以后没再改过）。如果你的起始时间是先赋值、再在 \code{if} 里改的，就先把它复制到一个新的变量里再用。
+
+\subsection{降级时返回什么}
+
+推理服务不可用时，有两种选择：
+\begin{itemize}
+  \item 返回 \code{503}：前端要专门处理错误，页面上这一块可能直接空掉；
+  \item 返回 \code{200}，带上 \code{degraded: true}，预测是空的，但\textbf{实时车辆数照常返回}。
+\end{itemize}
+
+这里选第二种：用户至少能看到“现在有几辆车”，前端根据 \code{degraded} 显示一句“预测暂时不可用”就行。降级的核心思想是：\textbf{一部分功能坏了，不影响其他部分}。
+
+\subsection{两个方向的 DTO}
+
+\code{HourlyPrediction} 上有 \code{@JsonNaming(SnakeCaseStrategy)}，因为 Python 服务用 snake\_case。如果直接把它返回给前端，前端收到的也会是 \code{avg_temp}、\code{is_raining}，和我们自己 API 的 camelCase 风格不一致。
+
+所以返回给前端时用另一个 DTO \code{ForecastPointResponse}（已经写好），字段名按我们自己的风格来，还顺便把 \code{isRaining == 1} 转成了布尔值 \code{raining}。这又是 Part 3 讲的那个道理：\textbf{进来的 DTO 跟着对方的格式，出去的 DTO 跟着我们对前端的承诺}，两边各自变化、互不影响。
+
+\subsection{测试是怎么验证的}
+
+\code{Part9ForecastServiceTest} 用 \code{ArgumentCaptor} 抓住“Service 实际发给推理客户端的请求”，再检查里面的内容：
+
+\begin{java}
+ArgumentCaptor<ForecastRequest> captor = ArgumentCaptor.forClass(ForecastRequest.class);
+verify(forecastClient).predict(captor.capture());        // 抓住调用 predict 时传进去的参数
+assertThat(captor.getValue().capacity()).isEqualTo(30);
+\end{java}
+
+\section{题目}
+
+\begin{task}{9.1\quad StationForecastService}
+标记成 Service。
+
+\textbf{a) \code{forecastTimes(hours)}}：用 \code{clock} 拿到“现在”。从下一个整点开始（现在正好是整点，就从现在开始），每小时一个，一共 \code{hours} 个。
+
+\begin{example}
+\begin{plaincode}
+现在 17:20，hours = 3   ->  [18:00, 19:00, 20:00]
+现在 18:00，hours = 2   ->  [18:00, 19:00]
+现在 22:59:59，hours = 3 ->  [23:00, 次日 00:00, 次日 01:00]
+\end{plaincode}
+\end{example}
+
+\textbf{b) \code{forecast(number, hours)}}：
+\begin{enumerate}
+  \item 用 \code{stationQueryService.getStation(number)} 查站点（不存在时它会抛 \code{StationNotFoundException}，不用你处理）；
+  \item 拼 \code{ForecastRequest}：站点编号、站点的总车位数、\code{forecastTimes(hours)}，\code{weather} 传 \code{null}；
+  \item 调 \code{forecastClient.predict(...)}；
+  \item 返回 \code{StationForecast}：编号、名字、总车位数、当前车辆数、是否降级、预测列表。
+\end{enumerate}
+
+\textbf{c)} 推理服务不可用（拿到 \code{Optional.empty()}）：\code{degraded = true}，\code{predictions} 是空列表。
+
+\begin{example}
+\begin{plaincode}
+站点 42：SMITHFIELD NORTH，总车位 30，现在 3 辆
+推理服务正常   ->  StationForecast(42, "SMITHFIELD NORTH", 30, 3, false, [8 个预测])
+推理服务挂了   ->  StationForecast(42, "SMITHFIELD NORTH", 30, 3, true,  [])
+\end{plaincode}
+\end{example}
+\end{task}
+
+\begin{task}{9.2\quad StationForecastController}
+REST Controller，公共路径 \code{/api/v1/stations}（和 \code{StationController} 一样，Spring 允许多个 Controller 共用一个前缀）。
+
+\code{GET /api/v1/stations/{number}/forecast?hours=..}：\code{hours} 默认 8；结果用 \code{StationForecastResponse.from(...)} 转换。
+
+\begin{jsoncode}
+{
+  "number": 42, "name": "SMITHFIELD NORTH", "capacity": 30, "currentBikes": 3, "degraded": false,
+  "predictions": [
+    { "time": "2026-10-28T18:00:00", "bikes": 12.4, "docks": 17.6,
+      "temperature": 8.0, "humidity": 83.5, "pressure": 1014.5, "raining": false }
+  ]
+}
+\end{jsoncode}
+\end{task}
+
+\begin{task}{9.3\quad 参数校验}
+\code{hours} 必须在 1 到 48 之间，否则 400（推理服务一次最多接受 48 个时间点）。站点不存在时，Part 6 的 \code{GlobalExceptionHandler} 会自动返回 404，不用你再写。
+\end{task}
+
+\section{全部做完：端到端试一下}
+
+\begin{shell}
+cd ml-service && .venv/bin/uvicorn app:app --port 8001        # 终端 1：Python 服务
+SCRAPER_ENABLED=true ./mvnw spring-boot:run                    # 终端 2：Spring Boot
+curl "localhost:8080/api/v1/stations/42/forecast?hours=3"      # 终端 3
+\end{shell}
+
+然后把终端 1 的 Python 服务停掉（Ctrl+C），连续请求几次，看 \code{degraded} 变成 \code{true}，再看 Spring Boot 的日志里从 \code{Forecast failed} 变成 \code{circuit breaker is OPEN}。
+
+\begin{think}
+\begin{enumerate}
+  \item 为什么用注入的 \code{Clock}，而不是直接 \code{LocalDateTime.now()}？在这一关的测试里具体体现在哪？
+  \item 降级时返回 200 + \code{degraded: true}，和返回 503，各有什么优缺点？
+  \item 为什么不把 \code{HourlyPrediction} 直接返回给前端？
+  \item 同一个站点的预测，5 分钟内被请求了 100 次，每次都去调推理服务合理吗？怎么优化？（提示：Part 11 的缓存）
+\end{enumerate}
+\end{think}

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dublin Bikes (Spring Boot)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+    #map { position: absolute; inset: 48px 0 0 0; }
+    header { height: 48px; display: flex; align-items: center; gap: 16px; padding: 0 16px; background: #0b3d2e; color: #fff; }
+    header h1 { font-size: 16px; margin: 0; }
+    #status { font-size: 13px; opacity: .85; }
+    .legend span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 4px 0 10px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Dublin Bikes</h1>
+  <div id="status">Loading…</div>
+  <div class="legend" style="margin-left:auto;font-size:13px">
+    <span style="background:#1a9850"></span>5+ bikes
+    <span style="background:#fdae61"></span>1–4
+    <span style="background:#d73027"></span>0
+    <span style="background:#888"></span>closed
+  </div>
+</header>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const map = L.map("map").setView([53.3498, -6.2603], 14);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors"
+  }).addTo(map);
+
+  function colour(s) {
+    if (s.status !== "OPEN") return "#888";
+    if (s.availableBikes === 0) return "#d73027";
+    if (s.availableBikes < 5) return "#fdae61";
+    return "#1a9850";
+  }
+
+  async function load() {
+    const status = document.getElementById("status");
+    try {
+      const res = await fetch("/api/v1/stations");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const stations = await res.json();
+      stations.forEach(s => {
+        L.circleMarker([s.lat, s.lng], { radius: 8, color: "#fff", weight: 1, fillColor: colour(s), fillOpacity: 0.9 })
+          .bindPopup(`<b>${s.name}</b><br>${s.availableBikes} bikes · ${s.availableStands} stands · ${s.totalStands} total<br>${s.status}`)
+          .addTo(map);
+      });
+      status.textContent = stations.length
+        ? `${stations.length} stations from /api/v1/stations`
+        : "No stations yet. Start the app with SCRAPER_ENABLED=true and wait a few seconds.";
+    } catch (e) {
+      status.textContent = "Could not load stations: " + e.message;
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>

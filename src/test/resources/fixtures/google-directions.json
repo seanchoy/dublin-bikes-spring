@@ -1,0 +1,4 @@
+{"status":"OK","routes":[{"summary":"Westmoreland St",
+  "legs":[{"distance":{"text":"1.6 km","value":1634},"duration":{"text":"6 mins","value":372},
+           "steps":[{"html_instructions":"Head <b>south</b>","distance":{"text":"0.2 km","value":200}}]}],
+  "overview_polyline":{"points":"a~l~Fjk~uOwHJy@P"}}]}

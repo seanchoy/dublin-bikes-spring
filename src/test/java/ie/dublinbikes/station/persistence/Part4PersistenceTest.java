@@ -13,9 +13,9 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import jakarta.persistence.EntityManager;
 
 /**
- * Part 4：JPA 实体、复合主键、Repository 查询。
- * DataJpaTest 只启动数据库相关的部分：一个内存 H2 数据库 + Flyway 建表 + JPA。
- * 每个测试方法结束后会自动回滚，所以测试之间的数据互不影响。
+ * Part 4: JPA entities, a composite primary key and Repository queries.
+ * DataJpaTest starts only the database parts: an in-memory H2 database + Flyway migrations + JPA.
+ * Each test method is rolled back afterwards, so tests do not affect each other's data.
  */
 @DataJpaTest
 class Part4PersistenceTest {
@@ -39,14 +39,14 @@ class Part4PersistenceTest {
         return s;
     }
 
-    /** 把还没写进数据库的修改写进去，再清空一级缓存，这样后面的查询一定会真的去查数据库。 */
+    /** Writes pending changes to the database and clears the first-level cache, so later queries really hit the database. */
     void flushAndClear() {
         entityManager.flush();
         entityManager.clear();
     }
 
     @Test
-    @DisplayName("4.1 StationEntity 存进去再读出来，所有字段都一样")
+    @DisplayName("4.1 A StationEntity saved and read back has the same fields")
     void stationRoundTrip() {
         stationRepository.save(station(42, "SMITHFIELD NORTH", "OPEN"));
         flushAndClear();
@@ -62,7 +62,7 @@ class Part4PersistenceTest {
     }
 
     @Test
-    @DisplayName("4.2 AvailabilityEntity 用 (number, lastUpdate) 复合主键存取")
+    @DisplayName("4.2 AvailabilityEntity is stored and loaded by the (number, lastUpdate) composite key")
     void availabilityCompositeKey() {
         stationRepository.save(station(42, "SMITHFIELD NORTH", "OPEN"));
         availabilityRepository.save(new AvailabilityEntity(new AvailabilityId(42, T1), 3, 27, "OPEN"));
@@ -77,7 +77,7 @@ class Part4PersistenceTest {
     }
 
     @Test
-    @DisplayName("4.2 主键相同的两次 save 只会有一行（第二次是更新）")
+    @DisplayName("4.2 Two saves with the same key leave one row (the second is an update)")
     void sameKeyIsUpdate() {
         stationRepository.save(station(42, "SMITHFIELD NORTH", "OPEN"));
         availabilityRepository.save(new AvailabilityEntity(new AvailabilityId(42, T1), 3, 27, "OPEN"));
@@ -91,7 +91,7 @@ class Part4PersistenceTest {
     }
 
     @Test
-    @DisplayName("4.3 findOpenStations 只返回 OPEN 的站点，按名字排序")
+    @DisplayName("4.3 findOpenStations returns only OPEN stations, ordered by name")
     void findOpenStations() {
         stationRepository.saveAll(List.of(
                 station(1, "CHARLEMONT PLACE", "OPEN"),
@@ -105,7 +105,7 @@ class Part4PersistenceTest {
     }
 
     @Test
-    @DisplayName("4.4 findLatest 返回某个站点最新的一条记录；没有记录时返回 Optional.empty()")
+    @DisplayName("4.4 findLatest returns a station's latest row, or Optional.empty() if there is none")
     void findLatest() {
         stationRepository.saveAll(List.of(station(42, "SMITHFIELD NORTH", "OPEN"), station(5, "CHARLEMONT PLACE", "OPEN")));
         availabilityRepository.saveAll(List.of(
@@ -122,7 +122,7 @@ class Part4PersistenceTest {
     }
 
     @Test
-    @DisplayName("4.5 findLatestForAllStations 每个站点只返回最新的一条")
+    @DisplayName("4.5 findLatestForAllStations returns only the latest row per station")
     void findLatestForAllStations() {
         stationRepository.saveAll(List.of(
                 station(42, "SMITHFIELD NORTH", "OPEN"),

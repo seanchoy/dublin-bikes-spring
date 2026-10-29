@@ -17,8 +17,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Part 6.1：见练习册 Part 6 */
-// TODO 6.1: 标记成 Service，并让所有方法都在只读事务里执行
+/** Part 6.1: see workbook Part 6 */
+// TODO 6.1: mark as a Service and run every method in a read-only transaction
 @Service
 @Transactional(readOnly = true)
 public class StationQueryService {
@@ -36,7 +36,7 @@ public class StationQueryService {
     }
 
     public List<Station> listStations() {
-        // TODO 6.1a: 所有站点按 number 升序，每个站点配上它最新的可用量（用 Part 4.5 的查询，只查一次）
+        // TODO 6.1a: all stations ordered by number, each with its latest availability (use the Part 4.5 query, only once)
         List<StationEntity> stations = stationRepository.findAll(Sort.by("number"));
         Map<Integer, AvailabilityEntity> latestByNumber;
         latestByNumber = availabilityRepository.findLatestForAllStations().stream()
@@ -50,7 +50,7 @@ public class StationQueryService {
     }
 
     public Station getStation(int number) {
-        // TODO 6.1b: 站点不存在时抛 StationNotFoundException
+        // TODO 6.1b: throw StationNotFoundException if the station does not exist
         Optional<StationEntity> stationEntity = stationRepository.findById(number);
         if(stationEntity.isEmpty()){
             throw new StationNotFoundException(number);
@@ -60,13 +60,13 @@ public class StationQueryService {
     }
 
     public List<NearbyStation> findNearest(double lat, double lng, int limit, boolean requireBikes) {
-        // TODO 6.1c: 复用 StationFinder（requireStands 传 false）
+        // TODO 6.1c: reuse StationFinder (pass false for requireStands)
         List<Station> allStations = listStations();
         List<NearbyStation> nearbyStations = stationFinder.findNearest(lat, lng, allStations, requireBikes, false, limit);
         return nearbyStations;
     }
 
-    /** availability 可能为 null（站点还没有任何可用量记录），这时车和空位都算 0。这个方法已经写好了。 */
+    /** availability may be null (the station has no availability records yet); then bikes and stands count as 0. Provided. */
     private static Station toStation(StationEntity station, AvailabilityEntity availability) {
         if (availability == null) {
             return new Station(station.getNumber(), station.getName(), station.getAddress(),

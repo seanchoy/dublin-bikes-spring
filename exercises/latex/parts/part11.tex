@@ -1,0 +1,126 @@
+\chapter{OpenWeather 客户端与缓存}
+
+迁移天气功能。原项目前端会显示当前气温、体感温度、湿度、风速，还有未来几天每 3 小时一档的预报。这一关先写调用 OpenWeather 的客户端，并且加上缓存：5 分钟内重复请求，不再打到 OpenWeather。
+
+\partinfo{%
+  \code{weather/openweather/OpenWeatherDto.java}：11.1\\
+  \code{weather/openweather/OpenWeatherClient.java}：11.2、11.3\\
+  \code{weather/CacheConfig.java}：11.3%
+}{\code{./mvnw test -Dtest='Part11*'}}
+
+\textbf{已经写好、不要改的类：}\code{WeatherSnapshot}（天气的领域对象）、\code{WeatherUnavailableException}、\code{OpenWeatherProperties}、\code{WeatherConfig}、\code{WeatherIngestResult}、\code{WeatherResponse}、两个天气实体，以及 \code{V2__create_weather_tables.sql}。
+
+\begin{note}[要先在 .env 里加 key]
+测试不需要。要用真实数据启动应用时，在根目录的 \code{.env} 里再加一行 \code{OPENWEATHER_API_KEY=...}（从原项目的 \code{var.env} 复制）：
+\begin{shell}
+grep '^OPENWEATHER_API_KEY=' ../dublin-bikes-team20/var.env >> .env
+\end{shell}
+\end{note}
+
+\section{知识点}
+
+\subsection{OpenWeather 的 JSON}
+
+\begin{jsoncode}
+GET /data/2.5/weather?lat=53.3498&lon=-6.2603&units=metric&appid=...
+{
+  "dt": 1761674400,                                    // 秒级时间戳（不是毫秒）
+  "main": { "temp": 9.4, "feels_like": 7.1, "humidity": 87, "pressure": 1012 },
+  "wind": { "speed": 5.1 },
+  "weather": [ { "id": 500, "description": "light rain" } ],
+  "rain": { "1h": 0.42 }                               // 不下雨时整个 rain 都没有
+}
+
+GET /data/2.5/forecast?...（同样的参数）
+{ "list": [ { "dt": ..., "main": {...}, "wind": {...}, "weather": [...],
+              "rain": { "3h": 0.9 }, "pop": 0.62 }, ... ] }   // 每 3 小时一项，共 40 项
+\end{jsoncode}
+
+两个要注意的地方：
+\begin{itemize}
+  \item \code{"1h"}、\code{"3h"} 以数字开头，不能直接当 Java 字段名，只能用 \code{@JsonProperty("1h")} 映射到一个合法的名字（比如 \code{oneHour}）。
+  \item \code{rain} 可能整个不存在，所以 DTO 里它可能是 \code{null}；里面的值用包装类型 \code{Double}，也可能是 \code{null}。
+  \item \code{dt} 是\textbf{秒}级时间戳，用 \code{Instant.ofEpochSecond}（Part 3 的 JCDecaux 是毫秒，用的是 \code{ofEpochMilli}）。
+\end{itemize}
+
+\subsection{嵌套 record 放在一个类里}
+
+这个 JSON 有好几层，每层一个 record。为了不散成七八个文件，都放在 \code{OpenWeatherDto} 这个类里面，用的时候写 \code{OpenWeatherDto.Current}、\code{OpenWeatherDto.Main}。类是 \code{final} 的、构造函数是 \code{private}，表示它只是一个“命名空间”，不用来创建对象。
+
+\subsection{缓存：@Cacheable}
+
+\begin{java}
+@Cacheable("exchangeRates")                        // 缓存名
+public ExchangeRate rate(String currency) { ... }  // 第一次真的执行，结果存进缓存
+                                                   // 之后同样的参数：直接返回缓存里的结果，方法体不执行
+\end{java}
+
+\begin{itemize}
+  \item 缓存的 key 默认是方法参数。\code{current()} 没有参数，所以整个缓存里只有一个值。
+  \item 要在某个 \code{@Configuration} 类上加 \code{@EnableCaching}，\code{@Cacheable} 才生效（和 \code{@EnableScheduling} 一样是“开关”，不加的话不报错，只是悄悄不缓存）。
+  \item \code{@Cacheable} 也是\textbf{靠代理实现的}，和 \code{@Transactional} 一样有自调用的坑：同一个类里 \code{this.current()} 不会走缓存。
+  \item 过期时间在 \code{application.yml} 里配好了：Caffeine（一个高性能的内存缓存库）\code{expireAfterWrite=5m}，写入 5 分钟后过期。
+\end{itemize}
+
+\subsection{测试是怎么验证的}
+
+\code{Part11OpenWeatherClientTest} 用 \code{ExpectedCount.once()} 告诉 MockRestServiceServer：这个 URL \textbf{只允许被请求一次}。调用两次 \code{current()}，第二次如果没走缓存，就会多发一次请求，测试失败。
+
+\section{题目}
+
+\begin{task}{11.1\quad OpenWeather 的 DTO}
+\textbf{a)} 给 \code{Main.feelsLike}、\code{Rain.oneHour}、\code{Rain.threeHours} 加上 \code{@JsonProperty}，分别对应 \code{feels_like}、\code{1h}、\code{3h}。
+
+\textbf{b)} 实现两个 \code{toSnapshot()}：
+
+{\small
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{3.2cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X}
+\toprule
+\code{WeatherSnapshot} & \code{Current} & \code{Item}（预报的一项） \\
+\midrule
+\code{time} & \code{Instant.ofEpochSecond(dt)} & 同左 \\
+温度、体感、湿度、气压 & \code{main} 里的 & 同左 \\
+\code{windSpeed} & \code{wind.speed} & 同左 \\
+\code{description} & \code{describe(weather)}（已经写好） & 同左 \\
+\code{rainMm} & \code{rain.oneHour}，没有就 0 & \code{rain.threeHours}，没有就 0 \\
+\code{rainProbability} & 0 & \code{pop} \\
+\bottomrule
+\end{tabularx}}
+\end{task}
+
+\begin{task}{11.2\quad OpenWeatherClient}
+\textbf{a)} 交给 Spring 管理；用 \code{props.baseUrl()} 创建 RestClient。
+
+\textbf{b) \code{current()}}：\code{GET /weather}，查询参数依次是 \code{lat}、\code{lon}、\code{units=metric}、\code{appid}（值都在 \code{props} 里），转成 \code{OpenWeatherDto.Current} 再 \code{toSnapshot()}。
+
+\textbf{c) \code{forecast()}}：\code{GET /forecast}，同样的参数，\code{list} 里每一项 \code{toSnapshot()}。
+
+出错（4xx / 5xx / 网络错误）时抛 \code{WeatherUnavailableException}，消息里带状态码。两个方法的请求代码几乎一样，可以抽一个私有方法复用。
+
+\begin{example}
+\begin{plaincode}
+请求 URL：https://ow.test/data/2.5/weather?lat=53.3498&lon=-6.2603&units=metric&appid=test-key
+返回 401   ->  WeatherUnavailableException: "OpenWeather returned HTTP 401"
+\end{plaincode}
+\end{example}
+\end{task}
+
+\begin{task}{11.3\quad 缓存}
+\code{CacheConfig} 是配置类并开启缓存；\code{current()} 缓存在 \code{"currentWeather"}，\code{forecast()} 缓存在 \code{"weatherForecast"}。
+
+\begin{example}
+\begin{plaincode}
+current(); current();             ->  只请求 OpenWeather 1 次
+forecast(); forecast(); current() ->  /forecast 1 次、/weather 1 次（两个缓存互不影响）
+\end{plaincode}
+\end{example}
+\end{task}
+
+\begin{think}
+\begin{enumerate}
+  \item 缓存 5 分钟，意味着用户最多看到 5 分钟前的天气。怎么决定过期时间？
+  \item 应用部署了 3 个实例，每个实例各有一份内存缓存，会有什么问题？什么时候需要换成 Redis 这类共享缓存？
+  \item 缓存里放的是 OpenWeather 出错时抛出的异常吗？（提示：\code{@Cacheable} 不会缓存异常）这对重试有什么影响？
+  \item \code{@Cacheable} 为什么也有自调用的问题？
+\end{enumerate}
+\end{think}

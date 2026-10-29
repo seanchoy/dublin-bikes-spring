@@ -6,14 +6,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import ie.dublinbikes.station.domain.Station;
 
 /**
- * JCDecaux /stations 接口返回的一条站点数据，字段和对方的 JSON 一一对应。
+ * One station returned by the JCDecaux /stations endpoint; fields match their JSON one to one.
  *
- * Part 3.1 / 3.2：见练习册 Part 3
+ * Part 3.1 / 3.2: see workbook Part 3
  */
 public record JcDecauxStationDto(
         int number,
-        // TODO 3.1: JSON 里的字段名是 contract_name、bike_stands、available_bike_stands、
-        //           available_bikes、last_update，而 Java 字段是 camelCase。用注解把它们对应起来。
+        // TODO 3.1: the JSON fields are contract_name, bike_stands, available_bike_stands,
+        //           available_bikes and last_update, but the Java fields are camelCase. Map them with annotations.
         @JsonProperty("contract_name") String contractName,
         String name,
         String address,
@@ -30,7 +30,7 @@ public record JcDecauxStationDto(
     }
 
     public Instant lastUpdateInstant() {
-        // TODO 3.2a: lastUpdate 是毫秒时间戳，转成 Instant；lastUpdate 为 null 时返回 null
+        // TODO 3.2a: lastUpdate is a timestamp in milliseconds; convert it to an Instant, or return null if lastUpdate is null
         if(lastUpdate == null){
             return null;
         }else {
@@ -39,7 +39,7 @@ public record JcDecauxStationDto(
     }
 
     public Station toStation() {
-        // TODO 3.2b: 转成领域对象 Station（注意字段对应关系）
+        // TODO 3.2b: convert to the Station domain object (watch how the fields map)
         return new Station(
                 number,
                 name,

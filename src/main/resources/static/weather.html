@@ -1,0 +1,209 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/api-compat.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Weather &mdash; Dublin Bike Share</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/style.css">
+
+</head>
+<body>
+
+<header class="navbar">
+
+  <a href="/" class="nav-logo">
+    <img src="/images/icons/bike.svg"
+         alt="Bike" class="nav-logo-icon">
+    Dublin<span>Bikes</span>
+  </a>
+
+  <nav class="nav-links">
+    
+    <a href="/"
+       class="nav-link ">
+      Home
+    </a>
+
+    <a href="/weather.html"
+       class="nav-link ">
+      Weather
+    </a>
+
+    <a href="/journey.html"
+       class="nav-link ">
+       Journey &amp; Map
+    </a>
+
+    <a href="/stations.html"
+       class="nav-link ">
+       Stations
+    </a>
+  </nav>
+
+  <div class="nav-right">
+    
+    <div class="weather-chip">
+      <img src="/images/icons/cloud.svg"
+           alt="Weather" class="chip-icon">
+      <span id="hdr-temp">--&deg;C</span>
+    </div>
+
+  </div>
+
+</header>
+
+<main>
+
+<div id="wx-icon-map" hidden
+  data-heavy-rain="/images/icons/weather-rain-heavy.svg"
+  data-light-rain="/images/icons/weather-rain.svg"
+  data-freezing="/images/icons/weather-snow.svg"
+  data-cold="/images/icons/weather-cloud.svg"
+  data-warm-sunny="/images/icons/weather-sun.svg"
+  data-partly-cloudy="/images/icons/weather-partly.svg"
+></div>
+
+<div class="page-header">
+  <div class="page-header-title">
+    <img src="/images/icons/weather.svg"
+         alt="Weather" class="page-header-icon">
+    <h1>Dublin Weather</h1>
+  </div>
+  <p>Live conditions &amp; hourly forecast &middot; Updated: <span id="wx-updated">&mdash;</span></p>
+</div>
+
+<div class="wx-row">
+
+  <div class="card card-current">
+    <h3>Current Conditions</h3>
+
+    <div class="wx-box">
+      <div class="wx-temp-big" id="wx-temp">&mdash;&deg;C</div>
+      <div class="wx-condition" id="wx-condition">
+        <img id="wx-cond-icon" src="/images/icons/cloud.svg"
+             alt="Condition" class="wx-cond-icon-img">
+        <span id="wx-cond-label">Loading&hellip;</span>
+      </div>
+    </div>
+
+    <div class="wx-box">
+      <div class="wx-stats">
+        <div class="wx-stat"><span class="val" id="wx-feels">&mdash;</span><span class="lbl">Feels Like</span></div>
+        <div class="wx-stat"><span class="val" id="wx-hum">&mdash;</span><span class="lbl">Humidity</span></div>
+        <div class="wx-stat"><span class="val" id="wx-wind">&mdash;</span><span class="lbl">Wind</span></div>
+        <div class="wx-stat"><span class="val" id="wx-rain">&mdash;</span><span class="lbl">Rain (1h)</span></div>
+      </div>
+    </div>
+
+    <div class="wx-box">
+      <p class="score-label-top">
+        <img src="/images/icons/bike.svg"
+             alt="Cycling" class="score-bike-icon">
+        Cycling Conditions
+      </p>
+      <div class="cycling-score">
+        <div class="score-circle" id="score-circle">&mdash;</div>
+        <div class="score-right">
+          <div class="score-track"><div class="score-fill" id="score-fill"></div></div>
+          <div class="score-text" id="score-text">&mdash;</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Upcoming forecast</h3>
+    <div class="chart-wrap chart-wrap-sm"><canvas id="temp7Chart"></canvas></div>
+    <div class="hourly-list" id="hourly-list">
+      <p class="loading-msg">Loading&hellip;</p>
+    </div>
+  </div>
+
+</div>
+
+<div class="card card-full">
+  <h3>
+    <img src="/images/icons/weather.svg"
+         alt="Temperature" class="card-title-icon">
+    Temperature &mdash; current &amp; forecast
+  </h3>
+  <div class="chart-wrap"><canvas id="tempChart"></canvas></div>
+</div>
+
+<div class="card card-full">
+  <h3>
+    <img src="/images/icons/weather.svg"
+         alt="Rain" class="card-title-icon">
+    Rain &mdash; current &amp; forecast
+  </h3>
+  <div class="chart-wrap"><canvas id="rainChart"></canvas></div>
+</div>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img src="/images/icons/bike.svg"
+           alt="Dublin Bikes" class="footer-logo-icon">
+      <span>Dublin Bikes</span>
+    </div>
+    <div class="footer-links">
+      <a href="/">Home</a>
+      <a href="/weather.html">Weather</a>
+      <a href="/journey.html">Map</a>
+      <a href="/stations.html">Stations</a>
+      
+    </div>
+    <span>&copy; <span id="footer-year"></span> Dublin Bikes</span>
+  </div>
+</footer>
+
+<button class="chatbot-fab" id="chatbot-fab">
+  <img src="/images/icons/grok-color.svg"
+       alt="AI" class="fab-icon">
+  Ask AI
+</button>
+
+<div class="chatbot-panel" id="chatbot-panel">
+  <div class="chat-header">
+    <div class="chat-header-left">
+      <img src="/images/icons/grok-color.svg"
+           alt="AI" class="chat-header-icon">
+      <div>
+        <div class="chat-title">Dublin Bikes AI</div>
+      </div>
+    </div>
+    <button class="chat-close" id="chat-close">&#x2715;</button>
+  </div>
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-msg bot">
+      <div class="chat-bubble">Hi! Ask me about bikes, routes or cycling tips in Dublin!</div>
+    </div>
+  </div>
+  <div class="chat-chips" id="chat-chips">
+    
+    <button class="chip" onclick="sendSuggestion(this)">Best time to cycle?</button>
+    <button class="chip" onclick="sendSuggestion(this)">Find a station?</button>
+  </div>
+  <div class="chat-input-row">
+    <input id="chat-input" class="chat-input" placeholder="Ask about bikes..." maxlength="500" autocomplete="off">
+    <button class="chat-send" id="chat-send">&#x27A4;</button>
+  </div>
+</div>
+
+<script src="/js/main.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+</body>
+</html>

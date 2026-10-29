@@ -29,7 +29,7 @@ body {
 /* LOGIN PAGE BODY (Leah) */
 body.login-page {
   height: 100vh;
-  background: url('/static/images/loginbg.png');
+  background: url('/images/loginbg.png');
   background-size: cover;
   background-position: center;
   justify-content: center;
@@ -273,7 +273,7 @@ h1, h2, h3, h4 { font-family: var(--font-head); }
 .hero {
   background:
     linear-gradient(rgba(0,60,20,0.65), rgba(0,40,15,0.75)),
-    url('/static/images/loginbg.png') center/cover no-repeat;
+    url('/images/loginbg.png') center/cover no-repeat;
   min-height: 420px;
   display: flex;
   align-items: center;

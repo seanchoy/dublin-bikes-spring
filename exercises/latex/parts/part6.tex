@@ -1,6 +1,6 @@
 \chapter{REST API：Controller、参数校验、统一错误处理}
 
-最后一关：把数据库里的数据通过 REST API 提供出去。做完之后，\code{src/main/resources/static/index.html} 这个地图页面（已经写好了）就能显示所有站点。
+最后一关：把数据库里的数据通过 REST API 提供出去。做完之后，\code{src/main/resources/static/map.html} 这个地图页面（已经写好了）就能显示所有站点。
 
 \partinfo{%
   \code{station/StationQueryService.java}：6.1\\
@@ -241,7 +241,7 @@ GET /api/v1/stations/nearest?lng=-6.26                   ->  400（缺少 lat）
 SCRAPER_ENABLED=true ./mvnw spring-boot:run
 \end{shell}
 
-几秒钟后打开 \url{http://localhost:8080}，地图上应该有 113 个站点。在另一个终端试试这些请求：
+几秒钟后打开 \url{http://localhost:8080/map.html}，地图上应该有 113 个站点。在另一个终端试试这些请求：
 
 \begin{shell}
 curl localhost:8080/api/v1/stations/42

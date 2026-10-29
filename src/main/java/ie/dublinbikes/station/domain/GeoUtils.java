@@ -1,6 +1,6 @@
 package ie.dublinbikes.station.domain;
 
-/** Part 1.2：见练习册 Part 1 */
+/** Part 1.2: see workbook Part 1 */
 public final class GeoUtils {
 
     static final double EARTH_RADIUS_METERS = 6_371_000;
@@ -9,7 +9,7 @@ public final class GeoUtils {
     }
 
     public static double haversineMeters(double lat1, double lng1, double lat2, double lng2) {
-        // TODO 1.2: 把 Python 版的 haversine 改写成 Java（公式在题目文档里）
+        // TODO 1.2: port the Python haversine function to Java (the formula is in the workbook)
         double phi1 = Math.toRadians(lat1);
         double phi2 = Math.toRadians(lat2);
         double dPhi = Math.toRadians(lat2 - lat1);

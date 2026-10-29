@@ -1,6 +1,6 @@
 package ie.dublinbikes.jcdecaux;
 
-/** 调用 JCDecaux 失败时统一抛这个异常，调用方不用关心底层是 HTTP 错误还是网络错误。 */
+/** Thrown whenever calling JCDecaux fails, so callers do not need to care whether it was an HTTP or a network error. */
 public class JcDecauxException extends RuntimeException {
 
     public JcDecauxException(String message) {

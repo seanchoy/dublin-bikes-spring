@@ -1,0 +1,150 @@
+\chapter{声明式 HTTP 客户端：@HttpExchange 调用 Google Maps}
+
+迁移路线规划。它要调用两个 Google 接口：Geocoding（地址转坐标）和 Directions（两点之间的路线）。这一关换一种写客户端的方式：\textbf{只写接口，实现由 Spring 生成}，就像 Part 4 的 Repository。
+
+\partinfo{%
+  \code{journey/google/GoogleMapsApi.java}：14.1（先做）\\
+  \code{journey/JourneyConfig.java}：14.2\\
+  \code{journey/google/GoogleMapsService.java}：14.3%
+}{\code{./mvnw test -Dtest='Part14*'}}
+
+\textbf{已经写好、不要改的类：}\code{GoogleMapsProperties}、\code{GoogleDto}（Google 的 JSON 结构）、\code{LatLng}、\code{TravelMode}、\code{RouteLeg}、\code{JourneyPlan}、\code{JourneyException}、\code{JourneyResponse}。
+
+\begin{note}[按顺序：14.1 → 14.2]
+14.2 会让 Spring 在启动时为 \code{GoogleMapsApi} 生成实现。如果接口上的注解（14.1）还没写，生成会失败，\textbf{整个应用都启动不了}（\code{FinalApplicationTest} 等全部变红）。
+\end{note}
+
+\begin{note}[本地跑真实数据需要服务端 key]
+\code{var.env} 里的 \code{GOOGLE_MAPS_API_KEY} 有“来源网站”限制，只能在浏览器里用，服务端调用会返回 \code{REQUEST_DENIED}（我试过）。原项目上线时服务端用的是 EC2 上的 \code{GOOGLE_MAPS_SERVER_KEY}。测试不受影响；要在本地跑真实路线，需要在 \code{.env} 里加一个服务端可用的 key。
+\end{note}
+
+\section{知识点}
+
+\subsection{三种写 HTTP 客户端的方式}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{l X l}
+\toprule
+写法 & 特点 & 本项目 \\
+\midrule
+RestClient & 一步步拼请求，最灵活 & Part 3、7、11 \\
+\code{@HttpExchange} 接口 & 用注解\textbf{声明}请求长什么样，Spring 生成实现 & 这一关 \\
+（Spring Cloud OpenFeign） & 和上一种思路一样，Spring Cloud 里常见 & — \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{@HttpExchange}
+
+\begin{java}
+public interface BookApi {
+
+    @GetExchange("/books/{isbn}")
+    Book get(@PathVariable String isbn);
+
+    @GetExchange("/search")
+    List<Book> search(@RequestParam("q") String query, @RequestParam("limit") int limit);
+    // -> GET /search?q=...&limit=...
+
+    @PostExchange("/books")
+    Book create(@RequestBody Book book);
+}
+\end{java}
+
+方法上的注解（包 \code{org.springframework.web.service.annotation}）说明 HTTP 方法和路径；参数上用的是你在 Controller 里见过的 \code{@PathVariable}、\code{@RequestParam}、\code{@RequestBody}，只是方向反过来：Controller 是“收”请求，这里是“发”请求。参数名最好在注解里写明（\code{@RequestParam("q")}），不依赖编译器保留的参数名。
+
+\subsection{让 Spring 生成实现}
+
+接口不能 new（Java 基础补充里讲过）。用 \code{HttpServiceProxyFactory} 在运行时生成一个实现它的代理：
+
+\begin{java}
+@Bean
+public BookApi bookApi(RestClient.Builder builder) {
+    RestClient restClient = builder.baseUrl("https://books.example").build();
+    HttpServiceProxyFactory factory = HttpServiceProxyFactory
+            .builderFor(RestClientAdapter.create(restClient))      // 底层用 RestClient 发请求
+            .build();
+    return factory.createClient(BookApi.class);                     // 生成实现 BookApi 的代理
+}
+\end{java}
+
+调用 \code{bookApi.search("dune", 5)} 时，代理读方法上的注解，拼出 \code{GET https://books.example/search?q=dune&limit=5}，用 RestClient 发出去，再用 Jackson 把响应转成返回类型。和 Repository、\code{@Transactional} 一样，又是“代理”。
+
+\textbf{注意}：声明式客户端遇到 4xx/5xx 会直接抛 RestClient 的异常（\code{RestClientException} 的子类），你在 Service 里统一转换。
+
+\subsection{Google 的“业务错误”}
+
+Google 的接口出错时 HTTP 状态码经常还是 200，错误写在 JSON 的 \code{status} 字段里：
+
+\begin{center}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X l l}
+\toprule
+情况 & 抛的 \code{JourneyException} 原因 & 最后返回给前端（Part 15） \\
+\midrule
+\code{OK} 且有结果 & —（成功） & 200 \\
+geocode 返回 \code{ZERO_RESULTS}，或 \code{OK} 但结果列表是空的 & \code{ADDRESS_NOT_FOUND} & 404 \\
+geocode 返回其他非 OK（比如 key 无效时的 \code{REQUEST_DENIED}） & \code{ROUTE_UNAVAILABLE} & 502 \\
+directions 返回\textbf{任何}非 OK（包括 \code{ZERO_RESULTS}） & \code{ROUTE_UNAVAILABLE} & 502 \\
+调用本身失败（HTTP 4xx/5xx、网络错误） & \code{ROUTE_UNAVAILABLE} & 502 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+为什么 directions 的 \code{ZERO_RESULTS} 不算 404：两个坐标都是 geocode 和站点数据给的，在都柏林市区里正常情况下总能找到路线；找不到说明是上游出了问题，而不是用户输错了什么。\textbf{这一关只负责抛对异常}，把原因转成 404 / 502 是 Part 15 的 \code{JourneyExceptionHandler} 做的。
+
+原项目把所有非 OK 都当成“地址找不到”。key 配错时用户看到的是“找不到地址”，排查方向完全错了。14.3c 修正这一点。
+
+\subsection{测试是怎么验证的}
+
+\code{@RestClientTest} + \code{@Import(JourneyConfig.class)}：你的 \code{@Bean} 方法会拿到被 \code{MockRestServiceServer} 接管的 \code{RestClient.Builder}，所以生成的代理发出的请求同样会被拦截。测试里的 \code{param(...)} 是一个自己写的匹配器：先把查询参数 URL 解码，再和期望值比较。
+
+\section{题目}
+
+\begin{task}{14.1\quad GoogleMapsApi 接口}
+给两个方法加上注解：
+\begin{itemize}
+  \item \code{geocode}：\code{GET /geocode/json}，参数 \code{address}、\code{key} 是查询参数；
+  \item \code{directions}：\code{GET /directions/json}，参数 \code{origin}、\code{destination}、\code{mode}、\code{key} 是查询参数。
+\end{itemize}
+每个参数都写成 \code{@RequestParam("名字")}，名字就是 Google 要求的查询参数名。路径只写 \code{/geocode/json} 这一段，前面的 \code{https://maps.googleapis.com/maps/api} 是 14.2 设置的 baseUrl。
+\end{task}
+
+\begin{task}{14.2\quad 生成实现并注册成 Bean}
+\code{JourneyConfig} 是配置类；\code{googleMapsApi(...)} 注册成 Bean：用 \code{builder} 和 \code{properties.baseUrl()} 创建 RestClient，再用 \code{HttpServiceProxyFactory} 生成 \code{GoogleMapsApi} 的实现。
+\end{task}
+
+\begin{task}{14.3\quad GoogleMapsService}
+Service。
+
+\textbf{a) \code{geocode(address)}}：调用时地址后面补上 \code{", Dublin, Ireland"}（不补的话，“Main Street”会被匹配到世界上任何一条 Main Street），key 用 \code{properties.serverKey()}（服务端 key，见前面的提示）；返回第一个结果的 \code{geometry.location}，转成 \code{LatLng}。
+
+\begin{note}[JSON 路径和 Java 写法的对应]
+\code{GoogleDto} 里每一层 JSON 都是一个嵌套的 record，所以 JSON 里的 \code{results[0].geometry.location} 在 Java 里是 \code{response.results().get(0).geometry().location()}，每一层都是 record 的访问方法。取 \code{get(0)} 之前要先确认列表不是空的（这就是 14.3c “OK 但没有结果”的情况）。
+\end{note}
+
+\textbf{b) \code{directions(from, to, mode)}}：\code{origin}、\code{destination} 用 \code{LatLng.toParam()}（\code{"53.3498,-6.2603"}），\code{mode} 用 \code{mode.param()}（枚举里存的 Google 参数值，比如 \code{"bicycling"}）；取第一条路线的第一段（\code{routes[0].legs[0]}，Java 里是 \code{routes().get(0).legs().get(0)}），转成：
+
+\begin{plaincode}
+RouteLeg(mode, distance.value, duration.value, distance.text, duration.text,
+         routes[0].overviewPolyline.points,
+         steps)   // legs[0].steps 的每一步转成 RouteStep(html_instructions, distance.text, duration.text)
+\end{plaincode}
+
+\textbf{c) 错误}：都抛 \code{JourneyException}，构造函数是 \code{new JourneyException(Reason.XXX, 消息)}（对照知识点里的表）：
+\begin{itemize}
+  \item geocode 返回 \code{ZERO_RESULTS}（或 OK 但没有结果）→ 原因 \code{ADDRESS_NOT_FOUND}；
+  \item 其他非 OK 的 status → \code{ROUTE_UNAVAILABLE}，消息里带上 status；
+  \item directions 非 OK（或者 \code{routes} 是空的）→ \code{ROUTE_UNAVAILABLE}；
+  \item 调用本身失败（HTTP 4xx/5xx、网络错误，也就是 \code{RestClientException}）→ \code{ROUTE_UNAVAILABLE}。两个方法都要处理，可以写一个私有方法，把 \code{api.xxx(...)} 包在 try/catch 里（Part 8 用 \code{Supplier} 包装调用的思路）。
+\end{itemize}
+比较 status 用 \code{"OK".equals(response.status())}，不要用 \code{==}（Part 10 的坑）。
+\end{task}
+
+\begin{think}
+\begin{enumerate}
+  \item \code{@HttpExchange} 声明式客户端和直接用 RestClient 相比，好处和局限是什么？
+  \item 为什么说它和 Spring Data 的 Repository 是同一个原理？
+  \item 第三方 API 在 HTTP 200 里返回业务错误，你会怎么处理？为什么不能只看 HTTP 状态码？
+  \item API key 在浏览器端和服务端有什么不同的安全要求？为什么要分成两个 key？
+\end{enumerate}
+\end{think}

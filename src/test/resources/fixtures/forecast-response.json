@@ -1,0 +1,5 @@
+{"station_id":42,"predictions":[
+ {"time":"2026-10-28T18:00:00","bikes":12.4,"docks":17.6,"avg_temp":8.0,"avg_humidity":83.5,"avg_pressure":1014.5,"is_raining":0},
+ {"time":"2026-10-28T19:00:00","bikes":15.5,"docks":14.5,"avg_temp":7.9,"avg_humidity":84.2,"avg_pressure":1014.7,"is_raining":0},
+ {"time":"2026-10-29T08:00:00","bikes":8.2,"docks":21.8,"avg_temp":6.8,"avg_humidity":86.5,"avg_pressure":1015.6,"is_raining":1}
+]}

@@ -27,9 +27,9 @@ import ie.dublinbikes.station.domain.NearbyStation;
 import ie.dublinbikes.station.domain.Station;
 
 /**
- * Part 6.2 / 6.3：REST Controller 和统一错误处理。
- * WebMvcTest 只启动 Web 层（Controller、ControllerAdvice、JSON 转换），不启动数据库。
- * Service 用 @MockitoBean 换成假对象，MockMvc 模拟 HTTP 请求，不用真的开端口。
+ * Part 6.2 / 6.3: REST controllers and unified error handling.
+ * WebMvcTest starts only the web layer (controllers, controller advice, JSON conversion), no database.
+ * The Service is replaced with a fake via @MockitoBean, and MockMvc simulates HTTP requests without opening a port.
  */
 @WebMvcTest(StationController.class)
 class Part6ControllerTest {
@@ -44,7 +44,7 @@ class Part6ControllerTest {
     StationQueryService queryService;
 
     @Test
-    @DisplayName("6.2 GET /api/v1/stations 返回 JSON 数组，字段名是 camelCase")
+    @DisplayName("6.2 GET /api/v1/stations returns a JSON array with camelCase field names")
     void listStations() throws Exception {
         when(queryService.listStations()).thenReturn(List.of(SMITHFIELD));
 
@@ -61,7 +61,7 @@ class Part6ControllerTest {
     }
 
     @Test
-    @DisplayName("6.2 GET /api/v1/stations/42 返回单个站点")
+    @DisplayName("6.2 GET /api/v1/stations/42 returns a single station")
     void getStation() throws Exception {
         when(queryService.getStation(42)).thenReturn(SMITHFIELD);
 
@@ -72,7 +72,7 @@ class Part6ControllerTest {
     }
 
     @Test
-    @DisplayName("6.3 站点不存在时返回 404 ProblemDetail")
+    @DisplayName("6.3 A missing station returns a 404 ProblemDetail")
     void stationNotFound() throws Exception {
         when(queryService.getStation(999)).thenThrow(new StationNotFoundException(999));
 
@@ -86,7 +86,7 @@ class Part6ControllerTest {
     }
 
     @Test
-    @DisplayName("6.2 GET /nearest：没传 limit 和 requireBikes 时用默认值 3 和 false")
+    @DisplayName("6.2 GET /nearest: without limit and requireBikes, defaults to 3 and false")
     void nearestDefaults() throws Exception {
         when(queryService.findNearest(53.3498, -6.2603, 3, false))
                 .thenReturn(List.of(new NearbyStation(SMITHFIELD, 1188)));
@@ -101,7 +101,7 @@ class Part6ControllerTest {
     }
 
     @Test
-    @DisplayName("6.2 GET /nearest：传了 limit 和 requireBikes")
+    @DisplayName("6.2 GET /nearest: with limit and requireBikes")
     void nearestWithParams() throws Exception {
         when(queryService.findNearest(53.3498, -6.2603, 5, true)).thenReturn(List.of());
 
@@ -115,7 +115,7 @@ class Part6ControllerTest {
     }
 
     @Test
-    @DisplayName("6.3 lat 超出 -90~90 时返回 400 ProblemDetail，而且不会调用 Service")
+    @DisplayName("6.3 lat outside -90 to 90 returns a 400 ProblemDetail, and the Service is not called")
     void invalidLatitude() throws Exception {
         mvc.perform(get("/api/v1/stations/nearest").param("lat", "100").param("lng", "-6.2603"))
                 .andExpect(status().isBadRequest())
@@ -125,14 +125,14 @@ class Part6ControllerTest {
     }
 
     @Test
-    @DisplayName("6.3 limit 超出 1~20 时返回 400")
+    @DisplayName("6.3 limit outside 1 to 20 returns 400")
     void invalidLimit() throws Exception {
         mvc.perform(get("/api/v1/stations/nearest").param("lat", "53.3").param("lng", "-6.2").param("limit", "50"))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
-    @DisplayName("6.3 缺少必填参数 lat 时返回 400 ProblemDetail")
+    @DisplayName("6.3 Missing required parameter lat returns a 400 ProblemDetail")
     void missingLatitude() throws Exception {
         mvc.perform(get("/api/v1/stations/nearest").param("lng", "-6.2603"))
                 .andExpect(status().isBadRequest())

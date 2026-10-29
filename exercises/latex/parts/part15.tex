@@ -1,0 +1,115 @@
+\chapter{路线接口：@RequestBody、请求体校验、按原因映射状态码}
+
+把地址、站点和路线拼成一次完整的出行：走到附近有车的站点 → 骑到终点附近有空位的站点 → 走到终点。这是第一个接收 \textbf{JSON 请求体}的接口（前面都是 GET）。
+
+\partinfo{%
+  \code{journey/JourneyService.java}：15.1\\
+  \code{journey/web/JourneyController.java}、\code{JourneyRequest.java}：15.2、15.3\\
+  \code{journey/web/JourneyExceptionHandler.java}：15.3%
+}{\code{./mvnw test -Dtest='Part15*'}，最后 \code{./mvnw test}}
+
+\section{知识点}
+
+\subsection{接收 JSON 请求体：@RequestBody}
+
+\begin{java}
+public record CreateBookRequest(@NotBlank String title, @Positive int pages) {}
+
+@PostMapping
+public BookResponse create(@Valid @RequestBody CreateBookRequest request) { ... }
+\end{java}
+
+\begin{itemize}
+  \item \code{@RequestBody}：把请求体的 JSON 反序列化成这个 record（之前问过的 Jackson 反序列化，就是在这里发生的）。
+  \item \code{@Valid}：反序列化之后，检查 record 字段上的校验注解。\textbf{不加 \code{@Valid}，字段上的注解不会生效。}
+  \item 校验失败时抛 \code{MethodArgumentNotValidException}，没有请求体时抛 \code{HttpMessageNotReadableException}。Part 6 的 \code{GlobalExceptionHandler} 继承了 \code{ResponseEntityExceptionHandler}，这两个都会自动变成 400 ProblemDetail，你不用再写。
+\end{itemize}
+
+\code{@NotBlank} 和 \code{@NotNull}、\code{@NotEmpty} 的区别：
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+值 & \code{@NotNull} & \code{@NotEmpty} & \code{@NotBlank} \\
+\midrule
+\code{null} & 不通过 & 不通过 & 不通过 \\
+\code{""} & 通过 & 不通过 & 不通过 \\
+\code{"   "} & 通过 & 通过 & 不通过 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{为什么用 POST}
+
+“规划路线”不修改任何数据，按语义 GET 也可以。用 POST 是因为请求参数是两个可能很长、带特殊字符的地址，放在请求体里比放在 URL 里干净，也能直接复用 record + \code{@Valid} 的校验。原项目也是 POST。
+
+\subsection{一个异常，多种状态码}
+
+\code{JourneyException} 带了一个 \code{reason}（枚举）。处理器根据 reason 决定状态码，用 Java 的 switch 表达式：
+
+\begin{java}
+HttpStatus status = switch (reason) {
+    case NOT_FOUND_A, NOT_FOUND_B -> HttpStatus.NOT_FOUND;    // 多个值共用一个分支
+    case UPSTREAM_DOWN -> HttpStatus.BAD_GATEWAY;
+};                                                            // 枚举的每个值都要覆盖，否则编译不过
+\end{java}
+
+\textbf{502 Bad Gateway} 的意思是“我（网关）自己没问题，是我调用的上游服务出错了”，正好描述 Google 出错的情况，比 500 更准确。
+
+\section{题目}
+
+\begin{task}{15.1\quad JourneyService}
+Service。\code{plan(startAddress, endAddress)}：
+\begin{enumerate}
+  \item 两个地址都用 \code{maps.geocode} 转成坐标；
+  \item \code{stationQueryService.listStations()} 拿到所有站点；
+  \item 取车站：起点附近最近的、\textbf{有车}的站点；还车站：终点附近最近的、\textbf{有空位}的站点。用 Part 1 写的 \code{stationFinder.findNearest(lat, lng, stations, requireBikes, requireStands, limit)}，\code{limit} 传 1。它返回的是 \code{List<NearbyStation>}（最多 1 个）：列表是空的，就抛 \code{new JourneyException(Reason.NO_STATION_AVAILABLE, 说明)}；
+  \item 三段路线（每段调用一次 \code{maps.directions}）：起点 → 取车站（\code{WALKING}），取车站 → 还车站（\code{BICYCLING}），还车站 → 终点（\code{WALKING}）。站点的坐标在 \code{nearby.station().lat()} / \code{lng()} 里，要先 \code{new LatLng(...)}；
+  \item 返回 \code{new JourneyPlan(起点坐标, 终点坐标, 取车站, 还车站, 三段路线)}，参数顺序看 \code{JourneyPlan} 的定义。总距离、总时间它会自己算。
+\end{enumerate}
+
+\begin{note}[两个 boolean 参数别传反]
+取车站要 \code{requireBikes = true, requireStands = false}；还车站正好相反。两个参数类型一样，传反了编译器发现不了，只能靠下面的例子（和测试）检查：取车站跳过了没车的 33 号，还车站跳过了没空位的 23 号。
+\end{note}
+
+\begin{example}
+\begin{plaincode}
+起点 Spire 附近：33 PRINCES STREET（88 米，0 辆车）、10 DAME STREET（775 米，5 辆车）
+  -> 取车站是 10（33 更近，但没有车）
+终点附近：23 HARCOURT TERRACE（更近，0 个空位）、5 CHARLEMONT PLACE（30 个空位）
+  -> 还车站是 5
+三段：步行 800 米 + 骑车 1700 米 + 步行 100 米  ->  totalDistanceMeters = 2600
+\end{plaincode}
+\end{example}
+\end{task}
+
+\begin{task}{15.2\quad JourneyController}
+REST Controller，公共路径 \code{/api/v1/journeys}；\code{plan} 处理 \code{POST /api/v1/journeys}，参数从 JSON 请求体来，结果用 \code{JourneyResponse.from(...)} 转换。（\code{GET /config} 已经写好，给前端返回加载地图用的浏览器 key。）
+
+\begin{jsoncode}
+POST /api/v1/journeys   {"start": "O'Connell Street", "end": "Grand Canal"}
+-> { "pickup": {"number": 10, ...}, "dropoff": {"number": 5, ...},
+     "walkToPickup": {...}, "cycle": {"mode": "BICYCLING", "distanceMeters": 1700, ...}, "walkFromDropoff": {...},
+     "totalDistanceMeters": 2600, "totalDurationSeconds": 1080 }
+\end{jsoncode}
+\end{task}
+
+\begin{task}{15.3\quad 校验和错误码}
+\begin{itemize}
+  \item \code{JourneyRequest} 的 \code{start}、\code{end} 都不能是 null、空字符串或只有空格（看知识点里的表，选哪个注解）；Controller 里触发这个校验（\code{@Valid}）。空的时候 400，而且不调用 Service。400 由 Part 6 的 \code{GlobalExceptionHandler} 处理，不用自己写；
+  \item \code{JourneyExceptionHandler}（全局 REST 异常处理器，\textbf{不要}继承 \code{ResponseEntityExceptionHandler}）：\code{ADDRESS_NOT_FOUND}、\code{NO_STATION_AVAILABLE} → 404；\code{ROUTE_UNAVAILABLE} → 502；detail 是异常消息，title 是 \code{"Journey not available"}，再加一个扩展字段 \code{reason}：\code{problem.setProperty("reason", e.getReason().name())}。前端靠这个字段区分“地址找不到”和“附近没有站点”，两种都是 404。
+\end{itemize}
+\end{task}
+
+\section{可选：带预测的路线}
+
+原项目还有一个“指定出发时间”的版本：取车站和还车站按\textbf{那个时刻的预测}车辆数来选，而不是现在的实时数据。有了 Part 9 的 \code{StationForecastService}，可以试着实现 \code{POST /api/v1/journeys/predict}：请求体多一个 \code{departAt}，对起点、终点附近各 5 个候选站点做预测，再选。这一部分没有测试，当作自由练习。
+
+\begin{think}
+\begin{enumerate}
+  \item 不加 \code{@Valid}，\code{JourneyRequest} 上的 \code{@NotBlank} 会生效吗？为什么要设计成这样？
+  \item 502 和 503 有什么区别？什么时候用哪个？
+  \item 一次规划要调用 Google 5 次（2 次 geocode + 3 次 directions）。怎么减少？（提示：缓存 geocode 结果、并行调用）
+  \item “规划路线”用 POST 而不是 GET，违反 REST 的语义吗？
+\end{enumerate}
+\end{think}

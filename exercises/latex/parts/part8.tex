@@ -1,0 +1,164 @@
+\chapter{重试、熔断、降级：Resilience4j}
+
+推理服务是你系统的一部分，但它是另一个进程：可能变慢、偶尔失败、甚至整个挂掉。这一关让 Java 这边在这些情况下都能“体面地”继续工作。
+
+\partinfo{%
+  \code{forecast/ForecastResilienceConfig.java}：8.1、8.3\\
+  \code{forecast/ResilientForecastClient.java}：8.2%
+}{\code{./mvnw test -Dtest='Part8*'}}
+
+\section{知识点}
+
+\subsection{三种故障，四种应对}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{l X X}
+\toprule
+故障 & 应对 & 本项目里 \\
+\midrule
+很慢 & \textbf{超时}：等太久就放弃 & Part 7 已经在 \code{application.yml} 里设好 \\
+偶尔失败一次 & \textbf{重试}：隔一小会儿再试 & 最多试 2 次，间隔 200ms \\
+一直失败（挂了） & \textbf{熔断}：暂时不再调用它 & 最近 5 次里一半以上失败就熔断 30 秒 \\
+失败以后返回什么 & \textbf{降级}：返回一个“差一点但能用”的结果 & 返回实时车辆数，标记 \code{degraded: true} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{重试：什么时候该重试，什么时候不该}
+
+\begin{itemize}
+  \item \textbf{该重试}：网络错误、5xx。这些可能是暂时的（服务正在重启、网络抖了一下）。
+  \item \textbf{不该重试}：4xx。比如 422 说明你发的请求本身有问题，再发一次结果还是一样，只是浪费时间。这就是 \code{ForecastUnavailableException.isRetryable()} 的用途。
+  \item 另外，\textbf{会产生副作用的请求}（比如付款）重试前要确认它是幂等的，否则可能付两次钱。预测是只读的，可以放心重试。
+\end{itemize}
+
+\subsection{熔断器的三种状态}
+
+\begin{plaincode}
+             最近 5 次调用里失败率 >= 50%
+   CLOSED  ------------------------------->  OPEN
+  （正常）                                  （熔断：直接拒绝，不调用对方）
+     ^                                         |
+     |  试探成功                               | 过了 30 秒
+     |                                         v
+     +-------------------------------------  HALF_OPEN
+                    试探失败 -> 回到 OPEN    （放 1 个请求过去试探）
+\end{plaincode}
+
+为什么要熔断？对方已经挂了，你每次还去连、还要等超时、还要重试，既让用户白等，又在对方恢复时一下子涌过去一堆请求。熔断以后，请求\textbf{立刻失败}（快速失败），直接走降级。
+
+\subsection{真实测量（Part 9 全部做完后的效果）}
+
+我把 Python 服务停掉，连续请求 6 次预测接口：
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+第几次 & 耗时 & 结果 & 发生了什么 \\
+\midrule
+1--4 & 约 0.22 秒 & 200，\code{degraded: true} & 连不上，重试 1 次，还是失败，降级 \\
+5--6 & 约 0.01 秒 & 200，\code{degraded: true} & 熔断器已打开，根本没去连，直接降级 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+（第 4 次之后就打开了：之前有 1 次成功的调用，加上 4 次失败，正好 5 次、失败率 80\%。）
+
+\subsection{Resilience4j 的写法}
+
+Resilience4j 是 Java 里最常用的容错库。这里直接用它的核心 API，不依赖任何 Spring 集成。以“调用一个支付接口”为例：
+
+\begin{java}
+CircuitBreakerConfig cbConfig = CircuitBreakerConfig.custom()
+        .slidingWindowSize(10)                          // 统计最近 10 次调用
+        .minimumNumberOfCalls(10)                       // 至少 10 次才开始判断
+        .failureRateThreshold(50)                       // 失败率 >= 50% 就打开
+        .waitDurationInOpenState(Duration.ofSeconds(60))// 打开 60 秒后进入半开
+        .permittedNumberOfCallsInHalfOpenState(2)       // 半开时放 2 个请求试探
+        .build();
+CircuitBreaker breaker = CircuitBreaker.of("payment", cbConfig);
+
+RetryConfig retryConfig = RetryConfig.custom()
+        .maxAttempts(3)                                 // 最多试 3 次（包括第一次）
+        .waitDuration(Duration.ofMillis(500))           // 每次间隔 500ms
+        .retryOnException(e -> e instanceof TimeoutException)   // 只有这种异常才重试
+        .build();
+Retry retry = Retry.of("payment", retryConfig);
+
+// 把一次调用“包”起来：先包重试，再在外面包熔断器
+Supplier<Receipt> call = () -> paymentApi.pay(order);
+Supplier<Receipt> protectedCall =
+        CircuitBreaker.decorateSupplier(breaker, Retry.decorateSupplier(retry, call));
+
+try {
+    Receipt r = protectedCall.get();                    // 真正执行
+} catch (CallNotPermittedException e) {
+    // 熔断器是打开的，这次根本没执行
+}
+\end{java}
+
+\code{Supplier<T>} 是 Java 自带的一个接口，表示“一段能返回 T 的代码，先不执行，等需要时调用 \code{get()}”。\code{() -> paymentApi.pay(order)} 就是一个 Supplier（lambda）。“装饰”（decorate）的意思是：在这段代码外面再包一层逻辑，返回的还是一个 Supplier。
+
+\textbf{为什么熔断器在外层？}熔断器在外层时，一次用户请求（不管内部重试了几次）只在熔断器里记\textbf{一次}结果。反过来包，每一次重试都会被熔断器单独计数，熔断会来得更早、更难预测。测试按“熔断器在外层”写：5 次请求、每次试 2 次，一共调用 10 次，然后熔断器打开。
+
+\subsection{熔断器和重试器做成 Bean}
+
+\code{CircuitBreaker}、\code{Retry} 是第三方库的类，不能在它们的源码上加 \code{@Component}。这正是 Part 2 想一想第 4 题的答案：\textbf{用 \code{@Configuration} + \code{@Bean} 把第三方对象注册成 Bean}，再在需要的地方构造函数注入。参数从 \code{ForecastProperties} 读，所以改配置不用改代码。
+
+\subsection{测试是怎么验证的}
+
+\code{Part8ResilienceTest} 不启动 Spring：直接 \code{new ForecastResilienceConfig()}，调用你写的 \code{@Bean} 方法拿到熔断器和重试器（\code{@Bean} 方法本质上就是普通方法），再用 Mockito 造一个会按需失败的 \code{ForecastClient}：
+
+\begin{java}
+when(client.predict(REQUEST)).thenThrow(serverError()).thenReturn(PREDICTIONS);  // 第一次失败，第二次成功
+verify(client, times(2)).predict(REQUEST);                                       // 一共被调用了 2 次
+\end{java}
+
+\section{题目}
+
+\begin{task}{8.1\quad 熔断器和重试器}
+\code{ForecastResilienceConfig} 是一个配置类，里面两个方法的返回值都注册成 Bean。参数都从 \code{properties.resilience()} 里取（默认值：\code{maxAttempts} = 2，\code{retryWait} = 200ms，\code{windowSize} = 5，\code{openFor} = 30s）。
+
+\textbf{a) \code{forecastCircuitBreaker}}：名字叫 \code{"forecast"}；统计最近 \code{windowSize} 次调用，至少 \code{windowSize} 次才开始判断；失败率达到 50\% 打开；打开 \code{openFor} 后进入半开；半开时只放 1 个请求。
+
+\textbf{b) \code{forecastRetry}}：名字叫 \code{"forecast"}；最多尝试 \code{maxAttempts} 次，间隔 \code{retryWait}。
+\end{task}
+
+\begin{task}{8.2\quad ResilientForecastClient}
+标记成 Service。\code{predict(request)}：用熔断器（外层）和重试（内层）包住 \code{client.predict(request)}。
+
+\begin{itemize}
+  \item 成功：返回 \code{Optional.of(结果)}；
+  \item 熔断器打开（\code{CallNotPermittedException}），或者重试完还是失败（\code{ForecastUnavailableException}）：打一条 warn 日志，返回 \code{Optional.empty()}，\textbf{不往外抛}。
+\end{itemize}
+
+\begin{example}
+\begin{plaincode}
+第一次就成功          ->  有结果，client 被调用 1 次
+第一次 503、第二次成功  ->  有结果，client 被调用 2 次
+一直 503              ->  Optional.empty()，client 被调用 2 次
+连续 5 次请求都失败    ->  熔断器 OPEN
+第 6 次请求           ->  Optional.empty()，client 一次都不调用
+\end{plaincode}
+\end{example}
+\end{task}
+
+\begin{task}{8.3\quad 新需求：4xx 不重试}
+只有 \code{ForecastUnavailableException} 且 \code{isRetryable()} 为 true 时才重试。
+
+\begin{example}
+\begin{plaincode}
+一直 422  ->  Optional.empty()，client 只被调用 1 次
+\end{plaincode}
+\end{example}
+\end{task}
+
+\begin{think}
+\begin{enumerate}
+  \item 超时、重试、熔断、降级分别解决什么问题？只加重试、不加熔断会有什么后果？
+  \item 熔断器为什么需要“半开”状态？直接从打开回到关闭会怎样？
+  \item 现在 4xx 也会被熔断器记为失败。这合理吗？如果不合理，你会怎么改？（提示：\code{ignoreExceptions} / \code{recordException}）
+  \item 应用部署了 3 个实例，每个实例各有一个熔断器。这会带来什么问题？
+  \item 重试有没有可能让一个本来就快撑不住的服务彻底被压垮？怎么避免？（提示：指数退避、随机抖动）
+\end{enumerate}
+\end{think}
