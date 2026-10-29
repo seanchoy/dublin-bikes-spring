@@ -1,0 +1,37 @@
+# Production stack on EC2: pulls the images CI publishes to GHCR and uses AWS RDS for the database.
+#   docker compose -f compose.prod.yaml pull
+#   docker compose -f compose.prod.yaml up -d
+# Next to this file on the server: .env (API keys and RDS_* settings, see .env.example) and
+# models/ (the forecast model files, about 2 GB). IMAGE_TAG picks the image version (default: latest).
+services:
+  ml-service:
+    image: ghcr.io/seanchoy/dublin-bikes-spring-ml:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    volumes:
+      - ./models:/app/models:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 10s
+      timeout: 3s
+      start_period: 90s
+      retries: 20
+
+  app:
+    image: ghcr.io/seanchoy/dublin-bikes-spring-app:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      SPRING_PROFILES_ACTIVE: mysql
+      MYSQL_HOST: ${RDS_HOST:?set RDS_HOST in .env}
+      MYSQL_PORT: ${RDS_PORT:-3306}
+      MYSQL_DATABASE: ${RDS_DATABASE:-dublin_bikes_spring}
+      MYSQL_USER: ${RDS_USER:?set RDS_USER in .env}
+      MYSQL_PASSWORD: ${RDS_PASSWORD:?set RDS_PASSWORD in .env}
+      FORECAST_BASE_URL: http://ml-service:8001
+      SCRAPER_ENABLED: "true"
+    # Only nginx on the same machine talks to the app; it is not exposed to the internet directly
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      ml-service:
+        condition: service_healthy

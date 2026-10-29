@@ -1,6 +1,7 @@
 # Secrets
 *.env
 .env*
+!.env.example
 
 # ML models (too large for git; copied to the server separately)
 ml-service/models/*.pkl

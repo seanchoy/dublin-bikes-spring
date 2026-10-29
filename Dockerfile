@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 # Spring Boot backend. Multi-stage build: the first stage compiles and packages with a JDK, the second ships only a JRE and the jar, so the image is smaller.
 
-FROM eclipse-temurin:25-jdk AS build
+# The jar is the same on every CPU, so build it on the build machine's own platform (fast even when
+# cross-building an arm64 image on an x86 CI runner); only the runtime stage below is per-platform.
+FROM --platform=$BUILDPLATFORM eclipse-temurin:25-jdk AS build
 WORKDIR /src
 COPY mvnw pom.xml ./
 COPY .mvn .mvn
