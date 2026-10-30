@@ -23,5 +23,5 @@ target/
 # OS
 .DS_Store
 
-# LaTeX build output
-exercises/latex/build/
+# Workbook, solutions and LaTeX source (kept locally, not published)
+exercises/

@@ -96,7 +96,6 @@ src/main/resources/
 ├── db/migration/        Flyway migrations (V1 stations, V2 weather)
 └── static/              frontend reused from the Flask project
 ml-service/              Python FastAPI inference service and its Dockerfile
-exercises/               the workbook (PDF + LaTeX source) and reference solutions
 src/test/java/           161 tests, one group per workbook part (Part1 ... Part17) plus FinalApplicationTest
 compose.yaml             local stack: app + ml-service + MySQL
 compose.rds.yaml         override: use AWS RDS instead of local MySQL
