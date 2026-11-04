@@ -17,6 +17,7 @@
   const RADIUS_2KM_M = 2000;
 
   let stations = [];
+  let stationsLoading = true;
   let userLocation = null;
   let destination = null;
 
@@ -96,10 +97,13 @@
     const warnEmpty = document.getElementById("warn-no-stations");
     const warn2km = document.getElementById("warn-no-2km");
     const listEl = document.getElementById("station-list");
+    const loadingEl = document.getElementById("stations-loading");
 
+    if (loadingEl) loadingEl.hidden = !stationsLoading;
     if (warnLoc) warnLoc.hidden = !noRef;
     if (warnEmpty) {
-      warnEmpty.hidden = noRef || nearby.length !== 0 || !userLocation;
+      warnEmpty.hidden =
+        stationsLoading || noRef || nearby.length !== 0 || !userLocation;
     }
     if (warn2km) {
       const show2km =
@@ -422,12 +426,14 @@
         return res.json();
       })
       .then((data) => {
+        stationsLoading = false;
         stations = Array.isArray(data) ? data : [];
         updateStationMarkers();
         renderSidebar();
       })
       .catch((err) => {
         console.error("Failed to load stations from API:", err);
+        stationsLoading = false;
         stations = [];
         updateStationMarkers();
         renderSidebar();
