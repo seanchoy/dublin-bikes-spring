@@ -17,13 +17,16 @@ public interface AvailabilityRepository extends JpaRepository<AvailabilityEntity
         return findFirstByIdNumberOrderByIdLastUpdateDesc(number);
     }
 
-    // TODO 4.5: remove default and the method body, and write a JPQL @Query instead: only the row with the latest lastUpdate per station
-    @Query("""
-            select a from AvailabilityEntity a 
-            where a.id.lastUpdate = (
-                        select max(a2.id.lastUpdate) from AvailabilityEntity a2
-                        where a.id.number = a2.id.number
-                        )            
-            """)
+    // Group first, then join back on the primary key. The grouping uses a skip scan on (number, last_update),
+    // so the cost follows the station count. A correlated subquery here would re-evaluate MAX for every history row.
+    @Query(value = """
+            SELECT a.number, a.last_update, a.available_bikes, a.available_bike_stands, a.status
+            FROM availability a
+            JOIN (
+                SELECT number, MAX(last_update) AS last_update
+                FROM availability
+                GROUP BY number
+            ) latest ON a.number = latest.number AND a.last_update = latest.last_update
+            """, nativeQuery = true)
     List<AvailabilityEntity> findLatestForAllStations();
 }
